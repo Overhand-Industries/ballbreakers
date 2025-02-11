@@ -1285,8 +1285,10 @@
         const pos = enemy.body.position;
         const outHorizontally = pos.x < 0 || pos.x > levelWidth;
         const outBelowSafety = pos.y > safetyFloorY;
-        // Trigger "OUT!" if enemy penetrates the ground (within 30px of playAreaHeight) and is moving fast.
-        const groundPenetration = pos.y > playAreaHeight - 30 && enemy.body.speed > 10;
+        // Calculate vertical center of the ground:
+        const groundCenter = (playAreaHeight - 20) + (groundExtraHeight / 2); // equals playAreaHeight + 30
+        // Trigger "OUT!" if enemy penetrates below the ground's center and is moving fast.
+        const groundPenetration = pos.y > groundCenter && enemy.body.speed > 10;
         if (outHorizontally || outBelowSafety || groundPenetration) {
           triggerOutEffect();
           removeEnemy(enemy.body);
@@ -1812,7 +1814,7 @@
           enemy.body.domElement.style.transform = "translate(-50%, -50%) rotate(" + enemy.body.angle + "rad)";
         }
       });
-      // Check for out-of-bounds enemies including ground penetration
+      // Check for out-of-bounds enemies including ground penetration at the vertical center of the ground.
       checkEnemyOutOfBounds();
       updateCamera();
       requestAnimationFrame(update);
