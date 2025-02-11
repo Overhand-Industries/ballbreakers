@@ -1005,20 +1005,19 @@
       });
     });
     
-    // --- NEW: Player-on-Player Impact Damage ---
-    // When two different player parts (at least one being the torso) collide,
-    // compute relative velocity and apply damage and knockback proportional to the impact.
+    // --- NEW: Player-on-Player Impact Damage (Velocity Based) ---
+    // This block applies minimal damage (1-2) on upper contacts while increasing knockback.
     let lastPlayerCollisionTime = 0;
     Events.on(engine, "collisionStart", function(event) {
       const currentTime = Date.now();
       event.pairs.forEach(pair => {
         const bodyA = pair.bodyA;
         const bodyB = pair.bodyB;
+        // Process if both bodies belong to different player characters and at least one is a torso.
         if (bodyA.character && bodyB.character && bodyA.character !== bodyB.character &&
             ((bodyA.domElement && bodyA.domElement.classList.contains("torso")) ||
              (bodyB.domElement && bodyB.domElement.classList.contains("torso")))
            ) {
-          // To avoid multiple rapid hits, process only if 500ms have passed since the last collision.
           if (currentTime - lastPlayerCollisionTime < 500) return;
           const vA = bodyA.velocity;
           const vB = bodyB.velocity;
@@ -1028,14 +1027,17 @@
           if (speed > thresholdSpeed) {
             const speedA = Math.hypot(vA.x, vA.y);
             const speedB = Math.hypot(vB.x, vB.y);
-            let damage = (Math.max(speedA, speedB) - Math.min(speedA, speedB)) * 20;
-            damage = Math.max(damage, 5);
+            // Use a low multiplier to yield only 1-2 damage.
+            let damage = (Math.max(speedA, speedB) - Math.min(speedA, speedB)) * 2;
+            damage = Math.max(damage, 1);
+            // Increase knockback by using a higher multiplier.
+            const knockbackMultiplier = 0.005;
             if (speedA > speedB) {
               bodyB.character.hp -= damage;
-              Body.applyForce(bodyB, bodyB.position, { x: relVel.x * 0.005, y: relVel.y * 0.005 });
+              Body.applyForce(bodyB, bodyB.position, { x: relVel.x * knockbackMultiplier, y: relVel.y * knockbackMultiplier });
             } else {
               bodyA.character.hp -= damage;
-              Body.applyForce(bodyA, bodyA.position, { x: -relVel.x * 0.005, y: -relVel.y * 0.005 });
+              Body.applyForce(bodyA, bodyA.position, { x: -relVel.x * knockbackMultiplier, y: -relVel.y * knockbackMultiplier });
             }
             lastPlayerCollisionTime = currentTime;
           }
