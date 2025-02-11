@@ -529,7 +529,7 @@
     createGoalDom(rightGoal, "right");
     // Create non-passable walls behind each goal
     const wallThickness = 50;
-    const fullHeight = playAreaHeight; // Adjust this if you need the wall to span a different vertical range.
+    const fullHeight = playAreaHeight + 2; // ground's bottom edge // Adjust this if you need the wall to span a different vertical range.
     const wallCenterY = fullHeight / 2;
 
     // Left goal wall: position it so its right edge is flush with the left goal.
@@ -711,7 +711,13 @@
         state: "patrol",
         direction: Math.random() < 0.5 ? -1 : 1
       };
-      enemy.body = Bodies.circle(x, y, 20, { friction: 0.5, frictionAir: 0.05, restitution: 0.1, label: "enemy" });
+      enemy.body = Bodies.circle(x, y, 20, { 
+  friction: 0.5, 
+  frictionAir: 0.05, 
+  restitution: 0.9,  // Increased bounciness
+  label: "enemy",
+  isBullet: true
+});
       createDomElement(enemy.body, "enemy", 40, 40);
       World.add(world, enemy.body);
 
@@ -1482,12 +1488,66 @@
         }
       }
     }
+// --- Display "OUT!" Effect ---
+function triggerOutEffect() {
+  // Create and style the "OUT!" text element (similar to the goal text)
+  const outText = document.createElement("div");
+  outText.id = "outText";
+  outText.innerText = "OUT!";
+  outText.style.position = "absolute";
+  outText.style.top = "50%";
+  outText.style.left = "50%";
+  outText.style.transform = "translate(-50%, -50%)";
+  outText.style.fontSize = "72px";
+  outText.style.fontWeight = "bold";
+  outText.style.fontFamily = '"Impact", "Arial Black", sans-serif';
+  outText.style.color = "red";
+  outText.style.zIndex = "60";
+  outText.style.pointerEvents = "none";
+  game.appendChild(outText);
+
+  // (Optional) Add a screen shake effect
+  const screenEl = document.getElementById("screen");
+  screenEl.classList.remove("shake");
+  void screenEl.offsetWidth; // force reflow
+  screenEl.classList.add("shake");
+
+  // Use the same CSS animation as the goal text (or create your own)
+  outText.classList.add("goalTextAnimation");
+  setTimeout(() => {
+    if (outText.parentNode) {
+      outText.parentNode.removeChild(outText);
+    }
+  }, 1000);
+}
+
+// --- Check if Enemies Are Out-Of-Bounds ---
+function checkEnemyOutOfBounds() {
+  // Iterate over a copy of the enemies array so removals don’t disrupt iteration
+  enemies.slice().forEach(enemy => {
+    const pos = enemy.body.position;
+    // If the enemy’s x position is off the left/right edges
+    // or if its y position is below the safety floor, trigger the out effect.
+    if (pos.x < 0 || pos.x > levelWidth || pos.y > safetyFloorY) {
+      triggerOutEffect();
+      removeEnemy(enemy.body);
+      // Respawn the enemy after a short delay (e.g., 2000ms)
+      setTimeout(() => {
+        createEnemy(levelWidth / 2, playAreaHeight / 2);
+      }, 2000);
+    }
+  });
+}
 
     // --- Main Game Loop ---
     function update() {
       updateGamepadInput();
       Engine.update(engine, 1000/60);
       
+      engine.positionIterations = 10;
+engine.velocityIterations = 10;
+engine.constraintIterations = 4;
+
       // ----- PLAYER ONE MOVEMENT -----
       if (keys1["ArrowLeft"]) {
         playerChar1.facing = "left";
@@ -1780,7 +1840,18 @@
           addPlayerClass(playerChar2, "player2");
         }, 1000);
       }
+// ----- Enemy Updates -----
+enemies.forEach(enemy => {
+  enemy.update();
+  if (enemy.body.domElement) {
+    enemy.body.domElement.style.left = enemy.body.position.x + "px";
+    enemy.body.domElement.style.top = enemy.body.position.y + "px";
+    enemy.body.domElement.style.transform = "translate(-50%, -50%) rotate(" + enemy.body.angle + "rad)";
+  }
+});
 
+// Check if any enemy has gone out-of-bounds
+checkEnemyOutOfBounds();
       updateCamera();
       requestAnimationFrame(update);
     }
