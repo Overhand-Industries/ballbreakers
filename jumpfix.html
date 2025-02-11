@@ -594,6 +594,7 @@
     function createCharacter(x, y) {
       const char = { hp: 100, alive: true, spawn: { x, y }, heldObject: null, isDying: false };
       char.facing = "right";
+      char.jumpReady = true; // NEW: jump impulse flag
       const size = 20;
       const torsoOptions = { friction: 6.0, frictionAir: 0.11, restitution: 0 };
       const defaultOptions = { friction: 0.5, frictionAir: 0.01, restitution: 0 };
@@ -1520,8 +1521,8 @@
         playerChar1.facing = "right";
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: 0.01, y: 0 });
       }
-      // --- Modified Jump Code for Player One ---
-      if (keys1["KeyB"] || keys1["Space"]) {
+      // --- Jump Impulse for Player One (applied only once per key press) ---
+      if ((keys1["KeyB"] || keys1["Space"]) && playerChar1.jumpReady) {
         const jumpStrength = 11;
         let horizontalInput = 0;
         if (keys1["ArrowLeft"])  horizontalInput -= 1;
@@ -1529,13 +1530,17 @@
         if (Math.abs(joystickAim1.x) > 0.1) {
           horizontalInput = joystickAim1.x;
         }
-        const verticalInput = -1; // Pure upward force
         const forceMultiplier = 0.0015;
-        const jumpForce = jumpStrength * forceMultiplier;
+        // Apply a fixed upward impulse and a horizontal impulse based on input
+        const jumpImpulse = jumpStrength * forceMultiplier;
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, {
-          x: horizontalInput * jumpForce,
-          y: verticalInput * jumpForce
+          x: horizontalInput * jumpImpulse,
+          y: -jumpImpulse
         });
+        playerChar1.jumpReady = false;
+      }
+      if (!(keys1["KeyB"] || keys1["Space"])) {
+        playerChar1.jumpReady = true;
       }
 
       // ----- PLAYER TWO MOVEMENT -----
@@ -1547,8 +1552,8 @@
         playerChar2.facing = "right";
         Body.applyForce(playerChar2.torso, playerChar2.torso.position, { x: 0.01, y: 0 });
       }
-      // --- Modified Jump Code for Player Two ---
-      if (keys2["Space"]) {
+      // --- Jump Impulse for Player Two (applied only once per key press) ---
+      if (keys2["Space"] && playerChar2.jumpReady) {
         const jumpStrength = 11;
         let horizontalInput = 0;
         if (keys2["ArrowLeft"])  horizontalInput -= 1;
@@ -1556,13 +1561,16 @@
         if (Math.abs(joystickAim2.x) > 0.1) {
           horizontalInput = joystickAim2.x;
         }
-        const verticalInput = -1;
         const forceMultiplier = 0.0015;
-        const jumpForce = jumpStrength * forceMultiplier;
+        const jumpImpulse = jumpStrength * forceMultiplier;
         Body.applyForce(playerChar2.torso, playerChar2.torso.position, {
-          x: horizontalInput * jumpForce,
-          y: verticalInput * jumpForce
+          x: horizontalInput * jumpImpulse,
+          y: -jumpImpulse
         });
+        playerChar2.jumpReady = false;
+      }
+      if (!keys2["Space"]) {
+        playerChar2.jumpReady = true;
       }
 
       // ----- Air Steering for Player One -----
@@ -1859,3 +1867,4 @@
   </script>
 </body>
 </html>
+
