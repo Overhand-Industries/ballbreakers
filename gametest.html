@@ -310,7 +310,7 @@
       box-shadow: 0 0 20px 10px rgba(255,255,200,0.9);
     }
     .goal-wall {
-      background: #0d0c29; /* change this to your desired color */
+      background: #0d0c29;
     }
     
     /* --- NEW: Player-Specific Overrides (CSS Only) --- */
@@ -341,6 +341,15 @@
       -webkit-mask-size: 500px;
       -webkit-mask-repeat: no-repeat;
       -webkit-mask-position: center;
+    }
+
+    /* Impact flash effect for high velocity collisions */
+    .impact-flash {
+      animation: impactFlash 0.2s ease;
+    }
+    @keyframes impactFlash {
+      0% { box-shadow: 0 0 10px red; }
+      100% { box-shadow: none; }
     }
   </style>
 </head>
@@ -517,7 +526,6 @@
       el.className = "goal " + cls;
       el.style.width = goalWidth + "px";
       el.style.height = goalHeight + "px";
-      // Center the DOM element relative to the Matter body
       el.style.left = (goalBody.position.x - goalWidth / 2) + "px";
       el.style.top = (goalBody.position.y - goalHeight / 2) + "px";
       game.appendChild(el);
@@ -528,10 +536,10 @@
     createGoalDom(rightGoal, "right");
     // Create non-passable walls behind each goal
     const wallThickness = 50;
-    const fullHeight = playAreaHeight; // Adjust this if you need the wall to span a different vertical range.
+    const fullHeight = playAreaHeight;
     const wallCenterY = fullHeight / 2;
 
-    // Left goal wall: position it so its right edge is flush with the left goal.
+    // Left goal wall
     const leftGoalWall = Bodies.rectangle(
       leftGoal.position.x - (goalWidth / 2 + wallThickness / 2 + 20),
       wallCenterY,
@@ -541,7 +549,7 @@
     );
     World.add(world, leftGoalWall);
 
-    // Right goal wall: position it so its left edge is flush with the right goal.
+    // Right goal wall
     const rightGoalWall = Bodies.rectangle(
       rightGoal.position.x + (goalWidth / 2 + wallThickness / 2 + 20),
       wallCenterY,
@@ -556,10 +564,9 @@
       el.className = "goal-wall " + cls;
       el.style.width = wallThickness + "px";
       el.style.height = fullHeight + "px";
-      // Center the DOM element: subtract half of its dimensions.
       el.style.left = (wallBody.position.x - wallThickness / 2) + "px";
       el.style.top = (wallBody.position.y - fullHeight / 2) + "px";
-      el.style.background = "#0d0c29"; // Adjust color as needed.
+      el.style.background = "#0d0c29";
       el.style.position = "absolute";
       el.style.zIndex = "15";
       game.appendChild(el);
@@ -682,14 +689,15 @@
       return char;
     }
     // Create two players
-    // Spawn player 1 near the left edge:
     let playerChar1 = createCharacter(100, playAreaHeight / 2);
-    // Spawn player 2 near the right edge (opposite side):
     let playerChar2 = createCharacter(levelWidth - 100, playAreaHeight / 2);
+
+    // Assign unique IDs to players
+    playerChar1.id = "player1";
+    playerChar2.id = "player2";
 
     // --- NEW: Add extra CSS classes for distinct styling ---
     function addPlayerClass(player, className) {
-      // List of parts to add the extra class to:
       let parts = [player.head, player.torso, player.rightUpperArm, player.rightHand,
                    player.leftUpperArm, player.leftHand, player.rightUpperLeg, player.rightFoot,
                    player.leftUpperLeg, player.leftFoot];
@@ -715,7 +723,6 @@
       World.add(world, enemy.body);
 
       enemy.update = function() {
-        // Choose the closer player as target
         const dx1 = playerChar1.torso.position.x - enemy.body.position.x;
         const dy1 = playerChar1.torso.position.y - enemy.body.position.y;
         const dist1 = Math.hypot(dx1, dy1);
@@ -800,7 +807,7 @@
       }
     }
 
-    // --- Melee Attack Function (Damages destructibles, enemies, and other player) ---
+    // --- Melee Attack Function ---
     function isWithinCone(origin, direction, targetPos, range, angleThreshold) {
       const vector = { x: targetPos.x - origin.x, y: targetPos.y - origin.y };
       const distance = Math.hypot(vector.x, vector.y);
@@ -831,11 +838,9 @@
         attackDir = onGround ? { x: 0, y: -1 } : { x: 0, y: 1 };
       }
       
-      // Select the attacking hand based on attack direction
       const attackHand = attackDir.x < 0 ? player.leftHand : player.rightHand;
       const whipOrigin = attackDir.x < 0 ? player.leftUpperArm.position : player.rightUpperArm.position;
       
-      // Compute a perpendicular "tangent" that always points upward.
       const option1 = { x: attackDir.y, y: -attackDir.x };
       const option2 = { x: -attackDir.y, y: attackDir.x };
       const tangent = (option1.y < 0) ? option1 : option2;
@@ -856,9 +861,7 @@
             x: (attackDir.x * forceOut + tangent.x * forceTangent) * amplitude,
             y: (attackDir.y * forceOut + tangent.y * forceTangent) * amplitude
           };
-          // Apply force to the attacking hand (for visual/melee swing effect)
           Body.applyForce(attackHand, attackHand.position, appliedForce);
-          // Immediately counteract the force on the torso so stick inputs determine movement
           Body.applyForce(player.torso, player.torso.position, { 
             x: -appliedForce.x, 
             y: -appliedForce.y 
@@ -868,14 +871,12 @@
         if (step >= steps) clearInterval(interval);
       }, stepTime);
 
-      // After a short delay, perform hit detection using your directional cone
       setTimeout(() => {
         const attackOrigin = attackHand.position;
         const meleeRange = 60;
         const damageAmount = 30;
-        const angleThreshold = Math.PI / 6; // 30° cone on either side
+        const angleThreshold = Math.PI / 6;
         
-        // Damage destructible objects
         [platforms, walls].forEach(arr => {
           arr.forEach(obj => {
             if (isWithinCone(attackOrigin, attackDir, obj.position, meleeRange, angleThreshold)) {
@@ -885,7 +886,6 @@
           });
         });
         
-        // Damage enemies
         enemies.forEach(enemy => {
           if (isWithinCone(attackOrigin, attackDir, enemy.body.position, meleeRange, angleThreshold)) {
             triggerScreenshake();
@@ -903,7 +903,6 @@
           }
         });
         
-        // Damage other players (PvP)
         const players = [playerChar1, playerChar2];
         players.forEach(p => {
           if (p !== player && isWithinCone(attackOrigin, attackDir, p.torso.position, meleeRange, angleThreshold)) {
@@ -1004,47 +1003,6 @@
         else if (pair.bodyB.label === "coin" && pair.bodyA.character) { collectCoin(pair.bodyB); }
       });
     });
-    
-    // --- NEW: Player-on-Player Impact Damage (Velocity Based) ---
-    // This block applies minimal damage (1-2) on upper contacts while increasing knockback.
-    let lastPlayerCollisionTime = 0;
-    Events.on(engine, "collisionStart", function(event) {
-      const currentTime = Date.now();
-      event.pairs.forEach(pair => {
-        const bodyA = pair.bodyA;
-        const bodyB = pair.bodyB;
-        // Process if both bodies belong to different player characters and at least one is a torso.
-        if (bodyA.character && bodyB.character && bodyA.character !== bodyB.character &&
-            ((bodyA.domElement && bodyA.domElement.classList.contains("torso")) ||
-             (bodyB.domElement && bodyB.domElement.classList.contains("torso")))
-           ) {
-          if (currentTime - lastPlayerCollisionTime < 500) return;
-          const vA = bodyA.velocity;
-          const vB = bodyB.velocity;
-          const relVel = { x: vA.x - vB.x, y: vA.y - vB.y };
-          const speed = Math.hypot(relVel.x, relVel.y);
-          const thresholdSpeed = 2;
-          if (speed > thresholdSpeed) {
-            const speedA = Math.hypot(vA.x, vA.y);
-            const speedB = Math.hypot(vB.x, vB.y);
-            // Use a low multiplier to yield only 1-2 damage.
-            let damage = (Math.max(speedA, speedB) - Math.min(speedA, speedB)) * 2;
-            damage = Math.max(damage, 1);
-            // Increase knockback by using a higher multiplier.
-            const knockbackMultiplier = 0.005;
-            if (speedA > speedB) {
-              bodyB.character.hp -= damage;
-              Body.applyForce(bodyB, bodyB.position, { x: relVel.x * knockbackMultiplier, y: relVel.y * knockbackMultiplier });
-            } else {
-              bodyA.character.hp -= damage;
-              Body.applyForce(bodyA, bodyA.position, { x: -relVel.x * knockbackMultiplier, y: -relVel.y * knockbackMultiplier });
-            }
-            lastPlayerCollisionTime = currentTime;
-          }
-        }
-      });
-    });
-
     Events.on(engine, "collisionStart", function(event) {
       event.pairs.forEach(pair => {
         if (pair.bodyA.label === "leftGoal" && pair.bodyB.label === "enemy") {
@@ -1074,6 +1032,45 @@
         }
       });
     });
+
+    // --- NEW: Player-on-Player High Velocity Impact Damage ---
+    let lastPlayerCollisionDamage = {};
+    const collisionDamageCooldown = 1000; // 1 second cooldown
+    Events.on(engine, "collisionStart", function(event) {
+      event.pairs.forEach(pair => {
+        if (pair.bodyA.character && pair.bodyB.character) {
+          let charA = pair.bodyA.character;
+          let charB = pair.bodyB.character;
+          if (charA === charB) return;
+          let idA = charA.id || "unknownA";
+          let idB = charB.id || "unknownB";
+          let pairId = idA < idB ? idA + "-" + idB : idB + "-" + idA;
+          let now = Date.now();
+          if (lastPlayerCollisionDamage[pairId] && now - lastPlayerCollisionDamage[pairId] < collisionDamageCooldown) {
+            return;
+          }
+          let relVelX = pair.bodyA.velocity.x - pair.bodyB.velocity.x;
+          let relVelY = pair.bodyA.velocity.y - pair.bodyB.velocity.y;
+          let relSpeed = Math.hypot(relVelX, relVelY);
+          const velocityThreshold = 5;
+          if (relSpeed > velocityThreshold) {
+            const damage = 1;
+            charA.hp -= damage;
+            charB.hp -= damage;
+            lastPlayerCollisionDamage[pairId] = now;
+            if (charA.torso && charA.torso.domElement) {
+              charA.torso.domElement.classList.add("impact-flash");
+              setTimeout(() => { charA.torso.domElement.classList.remove("impact-flash"); }, 200);
+            }
+            if (charB.torso && charB.torso.domElement) {
+              charB.torso.domElement.classList.add("impact-flash");
+              setTimeout(() => { charB.torso.domElement.classList.remove("impact-flash"); }, 200);
+            }
+          }
+        }
+      });
+    });
+
     function updateScoreboard() {
       document.getElementById("leftScore").textContent = leftScore;
       document.getElementById("rightScore").textContent = rightScore;
@@ -1242,7 +1239,7 @@
       }
       const idx = tvs.indexOf(tv);
       if (idx !== -1) { tvs.splice(idx, 1); }
-      const screenEl = document.getElementById("screen");
+      let screenEl = document.getElementById("screen");
       screenEl.classList.remove("shake");
       void screenEl.offsetWidth;
       screenEl.classList.add("shake");
@@ -1343,11 +1340,9 @@
     function triggerScreenshake() {
       const screenEl = document.getElementById("screen");
       screenEl.classList.remove("shake");
-      // Force reflow so the animation can restart
       void screenEl.offsetWidth;
       screenEl.classList.add("shake");
     }
-    // --- Digital Pixel Explosion Animation ---
     function digitalPixelExplosion(x, y) {
       triggerScreenshake();     
       const numPixels = 50;
@@ -1384,8 +1379,6 @@
     function updateCamera() {
       const screenWidth = window.innerWidth;
       const screenHeight = window.innerHeight;
-      
-      // Use player positions—and include the ball (enemy[0]) if available—for camera focus.
       let points = [
         playerChar1.torso.position,
         playerChar2.torso.position
@@ -1393,8 +1386,6 @@
       if (enemies.length > 0) {
         points.push(enemies[0].body.position);
       }
-      
-      // Calculate the average center of the points.
       let sumX = 0, sumY = 0;
       points.forEach(p => {
         sumX += p.x;
@@ -1402,34 +1393,22 @@
       });
       const centerX = sumX / points.length;
       const centerY = sumY / points.length;
-      
-      // Compute the bounding box of these points with a margin.
       const margin = 100;
       let minX = Math.min(...points.map(p => p.x)) - margin;
       let maxX = Math.max(...points.map(p => p.x)) + margin;
       let minY = Math.min(...points.map(p => p.y)) - margin;
       let maxY = Math.max(...points.map(p => p.y)) + margin;
-      
       const boxWidth = maxX - minX;
       const boxHeight = maxY - minY;
-      
-      // Calculate the scale so that the bounding box fits into the viewport.
       const scaleX = screenWidth / boxWidth;
       const scaleY = screenHeight / boxHeight;
       let scale = Math.min(scaleX, scaleY, 1);
-      
-      // Set the camera position so that the center is in the middle of the viewport.
       let camX = centerX - screenWidth / (2 * scale);
       let camY = centerY - screenHeight / (2 * scale);
-      
-      // Clamp the camera to the game area bounds.
       camX = Math.max(0, Math.min(camX, levelWidth - screenWidth / scale));
       camY = Math.max(0, Math.min(camY, gameHeight - screenHeight / scale));
-      
       cameraX = camX;
       cameraY = camY;
-      
-      // Apply the transform to the game container.
       game.style.transformOrigin = "top left";
       game.style.transform = `translate(-${cameraX}px, -${cameraY}px) scale(${scale})`;
       document.getElementById("parallax").style.backgroundPosition = (-cameraX * 0.5) + "px 0";
@@ -1468,7 +1447,6 @@
             keys1["ArrowRight"] = true; keys1["ArrowLeft"] = false;
           } else { keys1["ArrowLeft"] = false; keys1["ArrowRight"] = false; }
           keys1["ArrowUp"] = false;
-          // Map jump to both A button (index 0) and right stick button (index 11)
           keys1["Space"] = (gp.buttons[0] && gp.buttons[0].pressed) || (gp.buttons[11] && gp.buttons[11].pressed);
           let rx = gp.axes[2], ry = gp.axes[3];
           let rmag = Math.hypot(rx, ry);
@@ -1477,13 +1455,11 @@
           if (!lastGamepadButtonState[gp.index]) {
             lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
           }
-          // Shoot/Grab: combine button index 1 and right trigger (index 7)
           const shootPressed = (gp.buttons[1].pressed || gp.buttons[7].pressed);
           const shootWasPressed = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
           if (shootPressed && !shootWasPressed) {
             playerShoot(playerChar1, keys1, joystickAim1);
           }
-          // Melee: combine button index 2 and left trigger (index 6)
           const meleePressed = (gp.buttons[2].pressed || gp.buttons[6].pressed);
           const meleeWasPressed = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
           if (meleePressed && !meleeWasPressed) {
@@ -1497,7 +1473,6 @@
             keys2["ArrowRight"] = true; keys2["ArrowLeft"] = false;
           } else { keys2["ArrowLeft"] = false; keys2["ArrowRight"] = false; }
           keys2["ArrowUp"] = false;
-          // Map jump for player two to both A button (index 0) and right stick button (index 11)
           keys2["Space"] = (gp.buttons[0] && gp.buttons[0].pressed) || (gp.buttons[11] && gp.buttons[11].pressed);
           let rx = gp.axes[2], ry = gp.axes[3];
           let rmag = Math.hypot(rx, ry);
@@ -1506,13 +1481,11 @@
           if (!lastGamepadButtonState[gp.index]) {
             lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
           }
-          // Shoot/Grab for player two: combine button index 1 and right trigger (index 7)
           const shootPressed2 = (gp.buttons[1].pressed || gp.buttons[7].pressed);
           const shootWasPressed2 = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
           if (shootPressed2 && !shootWasPressed2) {
             playerShoot(playerChar2, keys2, joystickAim2);
           }
-          // Melee for player two: combine button index 2 and left trigger (index 6)
           const meleePressed2 = (gp.buttons[2].pressed || gp.buttons[6].pressed);
           const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
           if (meleePressed2 && !meleeWasPressed2) {
@@ -1528,7 +1501,6 @@
       updateGamepadInput();
       Engine.update(engine, 1000/60);
       
-      // ----- PLAYER ONE MOVEMENT -----
       if (keys1["ArrowLeft"]) {
         playerChar1.facing = "left";
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: -0.01, y: 0 });
@@ -1568,7 +1540,6 @@
         });
       }
 
-      // ----- PLAYER TWO MOVEMENT -----
       if (keys2["ArrowLeft"]) {
         playerChar2.facing = "left";
         Body.applyForce(playerChar2.torso, playerChar2.torso.position, { x: -0.01, y: 0 });
@@ -1608,7 +1579,6 @@
         });
       }
 
-      // ----- Air Steering for Player One -----
       if (playerChar1.torso.position.y < playAreaHeight - 30) {
         let airInput = { x: 0, y: 0 };
         if (keys1["ArrowLeft"])  airInput.x -= 1;
@@ -1627,7 +1597,6 @@
         }
       }
 
-      // ----- Air Steering for Player Two -----
       if (playerChar2.torso.position.y < playAreaHeight - 30) {
         let airInput = { x: 0, y: 0 };
         if (keys2["ArrowLeft"])  airInput.x -= 1;
@@ -1646,7 +1615,6 @@
         }
       }
 
-      // Update DOM positions for physics bodies
       domEntities.forEach(body => {
         if (body.domElement) {
           body.domElement.style.left = body.position.x + "px";
