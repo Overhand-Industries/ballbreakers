@@ -815,51 +815,45 @@
       if (diff > Math.PI) diff = 2 * Math.PI - diff;
       return diff <= angleThreshold;
     }
-   function meleeAttack(player, keys, joystickAim) {
+  function meleeAttack(player, keys, joystickAim) {
   // --- 1. Determine the attack direction ---
   let inputDir = { x: 0, y: 0 };
   if (keys["ArrowLeft"]) inputDir.x -= 1;
   if (keys["ArrowRight"]) inputDir.x += 1;
   if (keys["ArrowUp"]) inputDir.y -= 1;
   if (keys["ArrowDown"]) inputDir.y += 1;
-  // Use joystick input if no keyboard input is provided
+  // Use joystick input if no keyboard input is given
   if (inputDir.x === 0 && inputDir.y === 0 && Math.hypot(joystickAim.x, joystickAim.y) > 0.1) {
     inputDir.x = joystickAim.x;
     inputDir.y = joystickAim.y;
   }
-  // Default attack direction if no input is detected
+  // Default attack direction if none is detected
   if (inputDir.x === 0 && inputDir.y === 0) {
     inputDir = { x: 0, y: -1 };
   } else {
-    // Normalize inputDir
     const mag = Math.hypot(inputDir.x, inputDir.y);
     inputDir.x /= mag;
     inputDir.y /= mag;
   }
   
-  // --- 2. Determine which hand to use (based on horizontal direction) ---
+  // --- 2. Determine which hand to use ---
   const attackHand = (inputDir.x < 0) ? player.leftHand : player.rightHand;
-  // We'll use the corresponding upper arm's position as the origin for the visual effect
   const whipOrigin = (inputDir.x < 0) ? player.leftUpperArm.position : player.rightUpperArm.position;
   
   // --- 3. Create a visual slash effect ---
   const slash = document.createElement("div");
   slash.className = "melee-slash";
-  // Style the slash as a simple colored bar; you can further improve this with images or CSS animations
   slash.style.position = "absolute";
   slash.style.width = "100px";
   slash.style.height = "8px";
   slash.style.backgroundColor = "rgba(255,255,255,0.8)";
   slash.style.borderRadius = "4px";
-  // Rotate the slash based on attack direction (convert angle to degrees)
   const angleDeg = Math.atan2(inputDir.y, inputDir.x) * 180 / Math.PI;
   slash.style.transform = `rotate(${angleDeg}deg)`;
-  // Position the slash at the attack origin
   slash.style.left = whipOrigin.x + "px";
   slash.style.top = whipOrigin.y + "px";
   slash.style.zIndex = "100";
   game.appendChild(slash);
-  // Animate the slash effect (it moves and fades out)
   slash.animate([
     { transform: `rotate(${angleDeg}deg) translate(0,0) scale(1)`, opacity: 1 },
     { transform: `rotate(${angleDeg}deg) translate(100px, -50px) scale(1.5)`, opacity: 0 }
@@ -870,15 +864,14 @@
   });
   setTimeout(() => { if (slash.parentNode) slash.parentNode.removeChild(slash); }, 300);
   
-  // --- 4. Apply a swing force over several frames (whip-swing effect) ---
+  // --- 4. Apply a swing force over several frames (whip-like effect) ---
   const steps = 15;
-  const swingTime = 300; // total duration (ms)
+  const swingTime = 300; // total duration in ms
   const stepTime = swingTime / steps;
   let step = 0;
-  // Increase these force values for a more pronounced swing
   const forceOut = 0.07;
   const forceTangent = 0.07;
-  // Calculate a perpendicular vector (tangent) from inputDir
+  // Compute a perpendicular (tangent) vector from inputDir
   const tangentDir = { x: -inputDir.y, y: inputDir.x };
   const swingInterval = setInterval(() => {
     const amplitude = Math.sin(Math.PI * step / steps);
@@ -887,35 +880,49 @@
       y: (inputDir.y * forceOut + tangentDir.y * forceTangent) * amplitude
     };
     Body.applyForce(attackHand, attackHand.position, appliedForce);
-    // Optionally, apply a reactive force to the torso to add to the swing feel
     Body.applyForce(player.torso, player.torso.position, { x: -appliedForce.x, y: -appliedForce.y });
     step++;
     if (step >= steps) clearInterval(swingInterval);
   }, stepTime);
   
-  // --- 5. After a short delay, detect hits and apply damage ---
+  // --- 5. Detect hits and apply damage, including damage to other players ---
   setTimeout(() => {
-    // Increase the melee range and widen the cone for a more forgiving hit detection
+    // Increase melee range and widen the cone for more forgiving hit detection
     const meleeRange = 80;
     const damageAmount = 40;
-    const angleThreshold = Math.PI / 4; // 45 degrees
+    const angleThreshold = Math.PI / 4; // 45 degrees tolerance
     const attackOrigin = attackHand.position;
-    // Combine arrays of objects that can be hit: platforms, walls, and enemy bodies
+    
+    // Check targets: platforms, walls, enemy bodies
     const targets = [].concat(platforms, walls, enemies.map(e => e.body));
     targets.forEach(obj => {
       if (isWithinCone(attackOrigin, inputDir, obj.position, meleeRange, angleThreshold)) {
         damageDestructible(obj, damageAmount);
-        // Apply knockback to the target
         const dx = obj.position.x - attackOrigin.x;
         const dy = obj.position.y - attackOrigin.y;
         const dist = Math.hypot(dx, dy) || 1;
         Body.applyForce(obj, obj.position, { x: (dx / dist) * 0.05, y: (dy / dist) * 0.05 });
       }
     });
+    
+    // Now check for damage to other players (player vs. player damage)
+    const allPlayers = [playerChar1, playerChar2]; // Ensure these globals are accessible
+    allPlayers.forEach(p => {
+      if (p !== player && isWithinCone(attackOrigin, inputDir, p.torso.position, meleeRange, angleThreshold)) {
+        p.hp -= damageAmount;
+        const dx = p.torso.position.x - attackOrigin.x;
+        const dy = p.torso.position.y - attackOrigin.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        Body.applyForce(p.torso, p.torso.position, { x: (dx / dist) * 0.05, y: (dy / dist) * 0.05 });
+        // Optionally trigger a visual cue or sound effect here.
+      }
+    });
+    
   }, 100);
   
-  // Optionally, play a sound or increase combo meter here for extra fun!
+  // Optionally, play a sound or update a combo meter for extra fun!
 }
+
 
 
     // --- Digital Pixel Explosion Animation ---
