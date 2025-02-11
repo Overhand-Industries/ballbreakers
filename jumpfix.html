@@ -815,110 +815,108 @@
       if (diff > Math.PI) diff = 2 * Math.PI - diff;
       return diff <= angleThreshold;
     }
-    function meleeAttack(player, keys, joystickAim) {
-      let inputDir = { x: 0, y: 0 };
-      if (keys["ArrowLeft"]) inputDir.x -= 1;
-      if (keys["ArrowRight"]) inputDir.x += 1;
-      if (keys["ArrowUp"]) inputDir.y -= 1;
-      if (keys["ArrowDown"]) inputDir.y += 1;
-      if (inputDir.x === 0 && inputDir.y === 0 && Math.hypot(joystickAim.x, joystickAim.y) > 0.1) {
-        inputDir.x = joystickAim.x; 
-        inputDir.y = joystickAim.y;
+   function meleeAttack(player, keys, joystickAim) {
+  // --- 1. Determine the attack direction ---
+  let inputDir = { x: 0, y: 0 };
+  if (keys["ArrowLeft"]) inputDir.x -= 1;
+  if (keys["ArrowRight"]) inputDir.x += 1;
+  if (keys["ArrowUp"]) inputDir.y -= 1;
+  if (keys["ArrowDown"]) inputDir.y += 1;
+  // Use joystick input if no keyboard input is provided
+  if (inputDir.x === 0 && inputDir.y === 0 && Math.hypot(joystickAim.x, joystickAim.y) > 0.1) {
+    inputDir.x = joystickAim.x;
+    inputDir.y = joystickAim.y;
+  }
+  // Default attack direction if no input is detected
+  if (inputDir.x === 0 && inputDir.y === 0) {
+    inputDir = { x: 0, y: -1 };
+  } else {
+    // Normalize inputDir
+    const mag = Math.hypot(inputDir.x, inputDir.y);
+    inputDir.x /= mag;
+    inputDir.y /= mag;
+  }
+  
+  // --- 2. Determine which hand to use (based on horizontal direction) ---
+  const attackHand = (inputDir.x < 0) ? player.leftHand : player.rightHand;
+  // We'll use the corresponding upper arm's position as the origin for the visual effect
+  const whipOrigin = (inputDir.x < 0) ? player.leftUpperArm.position : player.rightUpperArm.position;
+  
+  // --- 3. Create a visual slash effect ---
+  const slash = document.createElement("div");
+  slash.className = "melee-slash";
+  // Style the slash as a simple colored bar; you can further improve this with images or CSS animations
+  slash.style.position = "absolute";
+  slash.style.width = "100px";
+  slash.style.height = "8px";
+  slash.style.backgroundColor = "rgba(255,255,255,0.8)";
+  slash.style.borderRadius = "4px";
+  // Rotate the slash based on attack direction (convert angle to degrees)
+  const angleDeg = Math.atan2(inputDir.y, inputDir.x) * 180 / Math.PI;
+  slash.style.transform = `rotate(${angleDeg}deg)`;
+  // Position the slash at the attack origin
+  slash.style.left = whipOrigin.x + "px";
+  slash.style.top = whipOrigin.y + "px";
+  slash.style.zIndex = "100";
+  game.appendChild(slash);
+  // Animate the slash effect (it moves and fades out)
+  slash.animate([
+    { transform: `rotate(${angleDeg}deg) translate(0,0) scale(1)`, opacity: 1 },
+    { transform: `rotate(${angleDeg}deg) translate(100px, -50px) scale(1.5)`, opacity: 0 }
+  ], {
+    duration: 300,
+    easing: "ease-out",
+    fill: "forwards"
+  });
+  setTimeout(() => { if (slash.parentNode) slash.parentNode.removeChild(slash); }, 300);
+  
+  // --- 4. Apply a swing force over several frames (whip-swing effect) ---
+  const steps = 15;
+  const swingTime = 300; // total duration (ms)
+  const stepTime = swingTime / steps;
+  let step = 0;
+  // Increase these force values for a more pronounced swing
+  const forceOut = 0.07;
+  const forceTangent = 0.07;
+  // Calculate a perpendicular vector (tangent) from inputDir
+  const tangentDir = { x: -inputDir.y, y: inputDir.x };
+  const swingInterval = setInterval(() => {
+    const amplitude = Math.sin(Math.PI * step / steps);
+    const appliedForce = {
+      x: (inputDir.x * forceOut + tangentDir.x * forceTangent) * amplitude,
+      y: (inputDir.y * forceOut + tangentDir.y * forceTangent) * amplitude
+    };
+    Body.applyForce(attackHand, attackHand.position, appliedForce);
+    // Optionally, apply a reactive force to the torso to add to the swing feel
+    Body.applyForce(player.torso, player.torso.position, { x: -appliedForce.x, y: -appliedForce.y });
+    step++;
+    if (step >= steps) clearInterval(swingInterval);
+  }, stepTime);
+  
+  // --- 5. After a short delay, detect hits and apply damage ---
+  setTimeout(() => {
+    // Increase the melee range and widen the cone for a more forgiving hit detection
+    const meleeRange = 80;
+    const damageAmount = 40;
+    const angleThreshold = Math.PI / 4; // 45 degrees
+    const attackOrigin = attackHand.position;
+    // Combine arrays of objects that can be hit: platforms, walls, and enemy bodies
+    const targets = [].concat(platforms, walls, enemies.map(e => e.body));
+    targets.forEach(obj => {
+      if (isWithinCone(attackOrigin, inputDir, obj.position, meleeRange, angleThreshold)) {
+        damageDestructible(obj, damageAmount);
+        // Apply knockback to the target
+        const dx = obj.position.x - attackOrigin.x;
+        const dy = obj.position.y - attackOrigin.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        Body.applyForce(obj, obj.position, { x: (dx / dist) * 0.05, y: (dy / dist) * 0.05 });
       }
-      let attackDir = { x: 0, y: 0 };
-      if (inputDir.x || inputDir.y) {
-        const mag = Math.hypot(inputDir.x, inputDir.y);
-        attackDir.x = inputDir.x / mag; 
-        attackDir.y = inputDir.y / mag;
-      } else {
-        const onGround = player.torso.position.y >= playAreaHeight - 5;
-        attackDir = onGround ? { x: 0, y: -1 } : { x: 0, y: 1 };
-      }
-      
-      const attackHand = attackDir.x < 0 ? player.leftHand : player.rightHand;
-      const whipOrigin = attackDir.x < 0 ? player.leftUpperArm.position : player.rightUpperArm.position;
-      
-      const option1 = { x: attackDir.y, y: -attackDir.x };
-      const option2 = { x: -attackDir.y, y: attackDir.x };
-      const tangent = (option1.y < 0) ? option1 : option2;
-      
-      const maxWhipDistance = 20;
-      const swingTime = 300, steps = 15;
-      const stepTime = swingTime / steps;
-      let step = 0;
-      const forceOut = 0.05, forceTangent = 0.05;
-      const interval = setInterval(() => {
-        const currentDistance = Math.hypot(
-          attackHand.position.x - whipOrigin.x,
-          attackHand.position.y - whipOrigin.y
-        );
-        if (currentDistance < maxWhipDistance) {
-          const amplitude = Math.sin(Math.PI * step / steps);
-          const appliedForce = {
-            x: (attackDir.x * forceOut + tangent.x * forceTangent) * amplitude,
-            y: (attackDir.y * forceOut + tangent.y * forceTangent) * amplitude
-          };
-          Body.applyForce(attackHand, attackHand.position, appliedForce);
-          Body.applyForce(player.torso, player.torso.position, { 
-            x: -appliedForce.x, 
-            y: -appliedForce.y 
-          });
-        }
-        step++;
-        if (step >= steps) clearInterval(interval);
-      }, stepTime);
+    });
+  }, 100);
+  
+  // Optionally, play a sound or increase combo meter here for extra fun!
+}
 
-      setTimeout(() => {
-        const attackOrigin = attackHand.position;
-        const meleeRange = 60;
-        const damageAmount = 30;
-        const angleThreshold = Math.PI / 6;
-        
-        [platforms, walls].forEach(arr => {
-          arr.forEach(obj => {
-            if (isWithinCone(attackOrigin, attackDir, obj.position, meleeRange, angleThreshold)) {
-              damageDestructible(obj, damageAmount);
-              triggerScreenshake();
-            }
-          });
-        });
-        
-        enemies.forEach(enemy => {
-          if (isWithinCone(attackOrigin, attackDir, enemy.body.position, meleeRange, angleThreshold)) {
-            triggerScreenshake();
-            damageDestructible(enemy.body, damageAmount);
-            const knockbackForce = 0.05;
-            const dx = enemy.body.position.x - attackOrigin.x;
-            const dy = enemy.body.position.y - attackOrigin.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist > 0) {
-              Body.applyForce(enemy.body, enemy.body.position, {
-                x: (dx / dist) * knockbackForce,
-                y: (dy / dist) * knockbackForce
-              });
-            }
-          }
-        });
-        
-        const players = [playerChar1, playerChar2];
-        players.forEach(p => {
-          if (p !== player && isWithinCone(attackOrigin, attackDir, p.torso.position, meleeRange, angleThreshold)) {
-            triggerScreenshake();
-            p.hp -= damageAmount;
-            const knockbackForce = 0.15;
-            const dx = p.torso.position.x - attackOrigin.x;
-            const dy = p.torso.position.y - attackOrigin.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist > 0) {
-              Body.applyForce(p.torso, p.torso.position, {
-                x: (dx / dist) * knockbackForce,
-                y: (dy / dist) * knockbackForce
-              });
-            }
-          }
-        });
-      }, 100);
-    }
 
     // --- Digital Pixel Explosion Animation ---
     function digitalPixelExplosion(x, y) {
