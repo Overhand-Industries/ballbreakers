@@ -1765,4 +1765,28 @@
     const dpad = document.getElementById("dpad");
     dpad.querySelector(".up").addEventListener("touchstart", (e) => { e.preventDefault(); keys1["ArrowUp"] = true; });
     dpad.querySelector(".up").addEventListener("touchend", (e) => { e.preventDefault(); keys1["ArrowUp"] = false; });
-    dpad.querySelector(".down").addEventListener("touchstart", (e) => { e.preventDefault(); keys1["ArrowDown"] = 
+    dpad.querySelector(".down").addEventListener("touchstart", (e) => { e.preventDefault(); keys1["ArrowDown"] = true; });
+    dpad.querySelector(".down").addEventListener("touchend", (e) => { e.preventDefault(); keys1["ArrowDown"] = false; });
+    dpad.querySelector(".left").addEventListener("touchstart", (e) => { e.preventDefault(); keys1["ArrowLeft"] = true; });
+    dpad.querySelector(".left").addEventListener("touchend", (e) => { e.preventDefault(); keys1["ArrowLeft"] = false; });
+    dpad.querySelector(".right").addEventListener("touchstart", (e) => { e.preventDefault(); keys1["ArrowRight"] = true; });
+    dpad.querySelector(".right").addEventListener("touchend", (e) => { e.preventDefault(); keys1["ArrowRight"] = false; });
+    const abButtons = document.getElementById("ab-buttons");
+    abButtons.querySelector(".A").addEventListener("touchstart", (e) => { e.preventDefault(); playerShoot(playerChar1, keys1, joystickAim1); });
+    abButtons.querySelector(".B").addEventListener("touchstart", (e) => { e.preventDefault(); keys1["Space"] = true; });
+    abButtons.querySelector(".B").addEventListener("touchend", (e) => { e.preventDefault(); keys1["Space"] = false; });
+    abButtons.querySelector(".C").addEventListener("touchstart", (e) => { e.preventDefault(); meleeAttack(playerChar1, keys1, joystickAim1); });
+    abButtons.querySelector(".C").addEventListener("mousedown", (e) => { e.preventDefault(); meleeAttack(playerChar1, keys1, joystickAim1); });
+  
+    window.addEventListener("load", () => { window.scrollTo(0, document.body.scrollHeight); });
+    window.addEventListener("scroll", () => {
+      const maxScroll = document.body.scrollHeight - window.innerHeight;
+      if (window.scrollY < maxScroll) { window.scrollTo(0, maxScroll); }
+    });
+    const player = document.querySelector('.player-part');
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { player.style.transform = "translate(-50%, -50%)"; }
+    });
+  </script>
+</body>
+</html>
