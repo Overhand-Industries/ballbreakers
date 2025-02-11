@@ -595,9 +595,9 @@
     function createCharacter(x, y) {
       const char = { hp: 100, alive: true, spawn: { x, y }, heldObject: null, isDying: false };
       char.facing = "right";
-      // New jump properties:
-      char.jumpReady = true; // true when allowed to start a jump
-      char.jumpTimer = 0;    // timer for continuous jump impulse (in seconds)
+      // Jump properties for springy multi-frame impulse
+      char.jumpReady = true;
+      char.jumpCounter = 0;  // counts frames of jump impulse
       const size = 20;
       const torsoOptions = { friction: 6.0, frictionAir: 0.11, restitution: 0 };
       const defaultOptions = { friction: 0.5, frictionAir: 0.01, restitution: 0 };
@@ -804,7 +804,8 @@
       }
     }
 
-    // --- Melee Attack Function ---
+    // --- Helper Functions for Melee ---
+    // Returns true if the target position is within the cone defined by origin, direction, range, and angle threshold.
     function isWithinCone(origin, direction, targetPos, range, angleThreshold) {
       const vector = { x: targetPos.x - origin.x, y: targetPos.y - origin.y };
       const distance = Math.hypot(vector.x, vector.y);
@@ -815,655 +816,201 @@
       if (diff > Math.PI) diff = 2 * Math.PI - diff;
       return diff <= angleThreshold;
     }
-  function meleeAttack(player, keys, joystickAim) {
-  // --- 1. Determine the attack direction ---
-  let inputDir = { x: 0, y: 0 };
-  if (keys["ArrowLeft"]) inputDir.x -= 1;
-  if (keys["ArrowRight"]) inputDir.x += 1;
-  if (keys["ArrowUp"]) inputDir.y -= 1;
-  if (keys["ArrowDown"]) inputDir.y += 1;
-  // Use joystick input if no keyboard input is given
-  if (inputDir.x === 0 && inputDir.y === 0 && Math.hypot(joystickAim.x, joystickAim.y) > 0.1) {
-    inputDir.x = joystickAim.x;
-    inputDir.y = joystickAim.y;
-  }
-  // Default attack direction if none is detected
-  if (inputDir.x === 0 && inputDir.y === 0) {
-    inputDir = { x: 0, y: -1 };
-  } else {
-    const mag = Math.hypot(inputDir.x, inputDir.y);
-    inputDir.x /= mag;
-    inputDir.y /= mag;
-  }
-  
-  // --- 2. Determine which hand to use ---
-  const attackHand = (inputDir.x < 0) ? player.leftHand : player.rightHand;
-  const whipOrigin = (inputDir.x < 0) ? player.leftUpperArm.position : player.rightUpperArm.position;
-  
-  // --- 3. Create a visual slash effect ---
-  const slash = document.createElement("div");
-  slash.className = "melee-slash";
-  slash.style.position = "absolute";
-  slash.style.width = "100px";
-  slash.style.height = "8px";
-  slash.style.backgroundColor = "rgba(255,255,255,0.8)";
-  slash.style.borderRadius = "4px";
-  const angleDeg = Math.atan2(inputDir.y, inputDir.x) * 180 / Math.PI;
-  slash.style.transform = `rotate(${angleDeg}deg)`;
-  slash.style.left = whipOrigin.x + "px";
-  slash.style.top = whipOrigin.y + "px";
-  slash.style.zIndex = "100";
-  game.appendChild(slash);
-  slash.animate([
-    { transform: `rotate(${angleDeg}deg) translate(0,0) scale(1)`, opacity: 1 },
-    { transform: `rotate(${angleDeg}deg) translate(100px, -50px) scale(1.5)`, opacity: 0 }
-  ], {
-    duration: 300,
-    easing: "ease-out",
-    fill: "forwards"
-  });
-  setTimeout(() => { if (slash.parentNode) slash.parentNode.removeChild(slash); }, 300);
-  
-  // --- 4. Apply a swing force over several frames (whip-like effect) ---
-  const steps = 15;
-  const swingTime = 300; // total duration in ms
-  const stepTime = swingTime / steps;
-  let step = 0;
-  const forceOut = 0.07;
-  const forceTangent = 0.07;
-  // Compute a perpendicular (tangent) vector from inputDir
-  const tangentDir = { x: -inputDir.y, y: inputDir.x };
-  const swingInterval = setInterval(() => {
-    const amplitude = Math.sin(Math.PI * step / steps);
-    const appliedForce = {
-      x: (inputDir.x * forceOut + tangentDir.x * forceTangent) * amplitude,
-      y: (inputDir.y * forceOut + tangentDir.y * forceTangent) * amplitude
-    };
-    Body.applyForce(attackHand, attackHand.position, appliedForce);
-    Body.applyForce(player.torso, player.torso.position, { x: -appliedForce.x, y: -appliedForce.y });
-    step++;
-    if (step >= steps) clearInterval(swingInterval);
-  }, stepTime);
-  
-  // --- 5. Detect hits and apply damage, including damage to other players ---
-  setTimeout(() => {
-    // Increase melee range and widen the cone for more forgiving hit detection
-    const meleeRange = 80;
-    const damageAmount = 40;
-    const angleThreshold = Math.PI / 4; // 45 degrees tolerance
-    const attackOrigin = attackHand.position;
-    
-    // Check targets: platforms, walls, enemy bodies
-    const targets = [].concat(platforms, walls, enemies.map(e => e.body));
-    targets.forEach(obj => {
-      if (isWithinCone(attackOrigin, inputDir, obj.position, meleeRange, angleThreshold)) {
-        damageDestructible(obj, damageAmount);
-        const dx = obj.position.x - attackOrigin.x;
-        const dy = obj.position.y - attackOrigin.y;
-        const dist = Math.hypot(dx, dy) || 1;
-        Body.applyForce(obj, obj.position, { x: (dx / dist) * 0.05, y: (dy / dist) * 0.05 });
-      }
-    });
-    
-    // Now check for damage to other players (player vs. player damage)
-    const allPlayers = [playerChar1, playerChar2]; // Ensure these globals are accessible
-    allPlayers.forEach(p => {
-      if (p !== player && isWithinCone(attackOrigin, inputDir, p.torso.position, meleeRange, angleThreshold)) {
-        p.hp -= damageAmount;
-        const dx = p.torso.position.x - attackOrigin.x;
-        const dy = p.torso.position.y - attackOrigin.y;
-        const dist = Math.hypot(dx, dy) || 1;
-        Body.applyForce(p.torso, p.torso.position, { x: (dx / dist) * 0.05, y: (dy / dist) * 0.05 });
-        // Optionally trigger a visual cue or sound effect here.
-      }
-    });
-    
-  }, 100);
-  
-  // Optionally, play a sound or update a combo meter for extra fun!
-}
 
-
-
-    // --- Digital Pixel Explosion Animation ---
-    function digitalPixelExplosion(x, y) {
-      triggerScreenshake();     
-      const numPixels = 50;
-      for (let i = 0; i < numPixels; i++) {
-        const pixel = document.createElement("div");
-        pixel.style.position = "absolute";
-        pixel.style.left = x + "px";
-        pixel.style.top = y + "px";
-        pixel.style.width = "4px";
-        pixel.style.height = "4px";
-        pixel.style.background = "#FFF";
-        pixel.style.border = "1px solid #000";
-        pixel.style.pointerEvents = "none";
-        pixel.style.opacity = "1";
-        game.appendChild(pixel);
-        const angle = Math.random() * 2 * Math.PI;
-        const distance = Math.random() * 50 + 20;
-        const deltaX = Math.cos(angle) * distance;
-        const deltaY = Math.sin(angle) * distance;
-        pixel.animate([
-          { transform: "translate(0,0)", opacity: 1 },
-          { transform: `translate(${deltaX}px, ${deltaY}px)`, opacity: 0 }
-        ], {
-          duration: 1000,
-          easing: "ease-out",
-          fill: "forwards"
-        });
-        setTimeout(() => { if (pixel.parentNode) { pixel.parentNode.removeChild(pixel); } }, 1000);
+    // --- Core Melee Attack Function ---
+    function meleeAttack(player, keys, joystickAim) {
+      // 1. Compute the attack direction from input.
+      let inputDir = { x: 0, y: 0 };
+      if (keys["ArrowLeft"])  inputDir.x -= 1;
+      if (keys["ArrowRight"]) inputDir.x += 1;
+      if (keys["ArrowUp"])    inputDir.y -= 1;
+      if (keys["ArrowDown"])  inputDir.y += 1;
+      // Use joystick input if no keyboard input is provided.
+      if (inputDir.x === 0 && inputDir.y === 0 && Math.hypot(joystickAim.x, joystickAim.y) > 0.1) {
+        inputDir.x = joystickAim.x;
+        inputDir.y = joystickAim.y;
       }
-    }
-
-    // --- Coin Collection & Particle Effects ---
-    let coinCount = 0;
-    function collectCoin(coin) {
-      coinCount++;
-      spawnSpark(coin.position.x, coin.position.y);
-      World.remove(world, coin);
-      coins = coins.filter(c => c !== coin);
-      if (coin.domElement && coin.domElement.parentNode) {
-        coin.domElement.parentNode.removeChild(coin.domElement);
+      // Default to upward if still zero.
+      if (inputDir.x === 0 && inputDir.y === 0) {
+        inputDir = { x: 0, y: -1 };
+      } else {
+        const mag = Math.hypot(inputDir.x, inputDir.y);
+        inputDir.x /= mag;
+        inputDir.y /= mag;
       }
-      console.log("Coin collected! Total:", coinCount);
-    }
-    Events.on(engine, "collisionStart", function(event) {
-      event.pairs.forEach(pair => {
-        let bullet = null, target = null;
-        if (pair.bodyA.label === "bullet") { bullet = pair.bodyA; target = pair.bodyB; }
-        else if (pair.bodyB.label === "bullet") { bullet = pair.bodyB; target = pair.bodyA; }
-        if (!bullet || !target) return;
-        const destructibleLabels = ["platform", "wall", "wallChunk", "enemy"];
-        if (destructibleLabels.includes(target.label)) {
-          damageDestructible(target, 30);
-          if (target.label === "enemy") {
-            let dx = target.position.x - bullet.position.x;
-            let dy = target.position.y - bullet.position.y;
-            let mag = Math.hypot(dx, dy);
-            if (mag > 0) { dx /= mag; dy /= mag; }
-            const knockbackForce = 0.05;
-            Body.applyForce(target, target.position, { x: dx * knockbackForce, y: dy * knockbackForce });
-          }
-        } else if (target.character && target.character !== bullet.owner) {
-          damageDestructible(target, 30);
-        }
-        World.remove(world, bullet);
-        if (bullet.domElement && bullet.domElement.parentNode) { bullet.domElement.parentNode.removeChild(bullet.domElement); }
-      });
-    });
-    Events.on(engine, "collisionStart", function(event) {
-      event.pairs.forEach(pair => {
-        if (pair.bodyA.label === "tv" && pair.bodyB.character) { breakTV(pair.bodyA); }
-        else if (pair.bodyB.label === "tv" && pair.bodyA.character) { breakTV(pair.bodyB); }
-      });
-    });
-    Events.on(engine, "collisionStart", function(event) {
-      event.pairs.forEach(pair => {
-        if (pair.bodyA.label === "coin" && pair.bodyB.character) { collectCoin(pair.bodyA); }
-        else if (pair.bodyB.label === "coin" && pair.bodyA.character) { collectCoin(pair.bodyB); }
-      });
-    });
-    function updateScoreboard() {
-      document.getElementById("leftScore").textContent = leftScore;
-      document.getElementById("rightScore").textContent = rightScore;
-    }
-    function removeEnemy(enemyBody) {
-      World.remove(world, enemyBody);
-      if (enemyBody.domElement && enemyBody.domElement.parentNode) {
-        enemyBody.domElement.parentNode.removeChild(enemyBody.domElement);
-      }
-      enemies = enemies.filter(e => e.body !== enemyBody);
-    }
-    Events.on(engine, "collisionStart", function(event) {
-      event.pairs.forEach(pair => {
-        if (pair.bodyA.label === "leftGoal" && pair.bodyB.label === "enemy") {
-          leftScore++;
-          removeEnemy(pair.bodyB);
-          updateScoreboard();
-          triggerGoalEffect();
-          setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
-        } else if (pair.bodyB.label === "leftGoal" && pair.bodyA.label === "enemy") {
-          leftScore++;
-          removeEnemy(pair.bodyA);
-          updateScoreboard();
-          triggerGoalEffect();
-          setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
-        } else if (pair.bodyA.label === "rightGoal" && pair.bodyB.label === "enemy") {
-          rightScore++;
-          removeEnemy(pair.bodyB);
-          updateScoreboard();
-          triggerGoalEffect();
-          setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
-        } else if (pair.bodyB.label === "rightGoal" && pair.bodyA.label === "enemy") {
-          rightScore++;
-          removeEnemy(pair.bodyA);
-          updateScoreboard();
-          triggerGoalEffect();
-          setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
+      const attackDir = inputDir;
+      
+      // 2. Choose the attacking hand and use the corresponding upper arm's position as the origin.
+      const attackHand = (attackDir.x < 0) ? player.leftHand : player.rightHand;
+      const attackOrigin = (attackDir.x < 0) ? player.leftUpperArm.position : player.rightUpperArm.position;
+      
+      // 3. Set melee parameters.
+      const meleeRange = 80;             // effective range (pixels)
+      const damageAmount = 40;           // damage dealt
+      const angleThreshold = Math.PI / 4; // 45° cone
+      
+      // 4. Process damage on targets (platforms, walls, enemies).
+      let hitSomething = false;
+      const targets = [].concat(platforms, walls, enemies.map(e => e.body));
+      targets.forEach(obj => {
+        if (isWithinCone(attackOrigin, attackDir, obj.position, meleeRange, angleThreshold)) {
+          damageDestructible(obj, damageAmount);
+          const dx = obj.position.x - attackOrigin.x;
+          const dy = obj.position.y - attackOrigin.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          Body.applyForce(obj, obj.position, { 
+            x: (dx / dist) * 0.05, 
+            y: (dy / dist) * 0.05 
+          });
+          hitSomething = true;
         }
       });
-    });
-    function triggerGoalEffect() {
-      let flash = document.getElementById("flashOverlay");
-      if (!flash) {
-        flash = document.createElement("div");
-        flash.id = "flashOverlay";
-        flash.style.position = "absolute";
-        flash.style.top = "0";
-        flash.style.left = "0";
-        flash.style.width = "100%";
-        flash.style.height = "100%";
-        flash.style.zIndex = "50";
-        flash.style.pointerEvents = "none";
-        game.appendChild(flash);
-      }
-      flash.classList.remove("flash");
-      void flash.offsetWidth;
-      flash.classList.add("flash");
-
-      let screenEl = document.getElementById("screen");
-      screenEl.classList.remove("shake");
-      void screenEl.offsetWidth;
-      screenEl.classList.add("shake");
-
-      let goalText = document.createElement("div");
-      goalText.id = "goalText";
-      goalText.innerText = "GOAL!";
-      goalText.style.position = "absolute";
-      goalText.style.top = "50%";
-      goalText.style.left = "50%";
-      goalText.style.transform = "translate(-50%, -50%)";
-      goalText.style.fontSize = "72px";
-      goalText.style.fontWeight = "bold";
-      goalText.style.fontFamily = '"Impact", "Arial Black", sans-serif';
-      goalText.style.color = "white";
-      goalText.style.zIndex = "60";
-      goalText.style.pointerEvents = "none";
-      game.appendChild(goalText);
-      goalText.classList.add("goalTextAnimation");
-      setTimeout(() => { if (goalText.parentNode) { goalText.parentNode.removeChild(goalText); } }, 1000);
-    }
-    function checkEnemyOutOfBounds() {
-  // Loop through all enemies and remove any that are out of bounds.
-  enemies.slice().forEach(enemy => {
-    const pos = enemy.body.position;
-    const outHorizontally = pos.x < 0 || pos.x > levelWidth;
-    const outBelowSafety = pos.y > safetyFloorY;
-    // Calculate the ground center (adjust based on your ground parameters)
-    const groundCenter = (playAreaHeight - 20) + (groundExtraHeight / 2);
-    const groundPenetration = pos.y > groundCenter && enemy.body.speed > 3;
-    if (outHorizontally || outBelowSafety || groundPenetration) {
-      triggerOutEffect();
-      removeEnemy(enemy.body);
-      setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
-    }
-  });
-}
-
-function triggerOutEffect() {
-  // Display a brief "OUT!" effect on screen.
-  const outText = document.createElement("div");
-  outText.id = "outText";
-  outText.innerText = "OUT!";
-  outText.style.position = "absolute";
-  outText.style.top = "50%";
-  outText.style.left = "50%";
-  outText.style.transform = "translate(-50%, -50%)";
-  outText.style.fontSize = "72px";
-  outText.style.fontWeight = "bold";
-  outText.style.fontFamily = '"Impact", "Arial Black", sans-serif';
-  outText.style.color = "red";
-  outText.style.zIndex = "60";
-  outText.style.pointerEvents = "none";
-  game.appendChild(outText);
-  
-  const screenEl = document.getElementById("screen");
-  screenEl.classList.remove("shake");
-  void screenEl.offsetWidth;
-  screenEl.classList.add("shake");
-  
-  outText.classList.add("goalTextAnimation");
-  setTimeout(() => {
-    if (outText.parentNode) {
-      outText.parentNode.removeChild(outText);
-    }
-  }, 1000);
-}
-
-    function damageDestructible(obj, damage) {
-      if (typeof obj.hp !== "number") return;
-      obj.hp -= damage;
-      particleBurst(obj.position.x, obj.position.y, "orange");
-      if (obj.hp <= 0) {
-        particleBurst(obj.position.x, obj.position.y, "red");
-        if (obj.label === "wall") { breakWall(obj); }
-        else if (obj.label === "platform") { breakBoulder(obj); }
-        else {
-          World.remove(world, obj);
-          if (obj.domElement && obj.domElement.parentNode) {
-            obj.domElement.parentNode.removeChild(obj.domElement);
-          }
-          if (obj.label === "platform") {
-            let idx = platforms.indexOf(obj);
-            if (idx !== -1) platforms.splice(idx, 1);
-          } else if (obj.label === "enemy") {
-            let idx = enemies.findIndex(e => e.body === obj);
-            if (idx !== -1) enemies.splice(idx, 1);
+      
+      // 5. Process player vs. player damage.
+      [playerChar1, playerChar2].forEach(p => {
+        if (p !== player) {
+          if (isWithinCone(attackOrigin, attackDir, p.torso.position, meleeRange, angleThreshold)) {
+            p.hp -= damageAmount;
+            const dx = p.torso.position.x - attackOrigin.x;
+            const dy = p.torso.position.y - attackOrigin.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            Body.applyForce(p.torso, p.torso.position, { 
+              x: (dx / dist) * 0.05, 
+              y: (dy / dist) * 0.05 
+            });
+            hitSomething = true;
+            if (p.hp <= 0 && !p.isDying) {
+              p.isDying = true;
+              triggerDeathEffect();
+            }
           }
         }
+      });
+      
+      // 6. Trigger a screenshake if any target was hit.
+      if (hitSomething) {
+        triggerScreenshake();
       }
     }
-    function breakWall(wall) {
-      World.remove(world, wall);
-      if (wall.domElement && wall.domElement.parentNode) {
-        wall.domElement.parentNode.removeChild(wall.domElement);
+
+    // --- KO/Death Effect & Screenshake Functions ---
+    function triggerDeathEffect() {
+      let existingOverlay = document.getElementById("deathOverlay");
+      if (existingOverlay) {
+        existingOverlay.parentNode.removeChild(existingOverlay);
       }
-      let idx = walls.indexOf(wall);
-      if (idx !== -1) walls.splice(idx, 1);
-      const isStalagmite = wall.domElement.classList.contains("stalagmite");
-      const cols = isStalagmite ? 3 : 2;
-      const rows = isStalagmite ? 3 : 2;
-      const chunkWidth = wall.width / cols;
-      const chunkHeight = wall.height / rows;
-      for (let i = 0; i < rows; i++) {
-        for (let j = 0; j < cols; j++) {
-          const cx = wall.position.x - wall.width/2 + chunkWidth/2 + j * chunkWidth;
-          const cy = wall.position.y - wall.height/2 + chunkHeight/2 + i * chunkHeight;
-          let chunk = Bodies.rectangle(cx, cy, chunkWidth, chunkHeight, { isStatic: false, label: "wallChunk" });
-          Body.setVelocity(chunk, { x: (Math.random()-0.5)*10, y: (Math.random()-0.5)*10 });
-          World.add(world, chunk);
-          const el = document.createElement("div");
-          el.className = "rock-chunk";
-          el.style.width = chunkWidth + "px";
-          el.style.height = chunkHeight + "px";
-          el.style.left = cx + "px";
-          el.style.top = cy + "px";
-          if (isStalagmite) {
-            el.style.borderRadius = "0";
-            el.style.clipPath = "polygon(0% 20%, 30% 0%, 70% 10%, 100% 20%, 80% 100%, 50% 80%, 20% 100%)";
-          }
-          game.appendChild(el);
-          chunk.domElement = el;
-          domEntities.push(chunk);
+      const deathOverlay = document.createElement("div");
+      deathOverlay.id = "deathOverlay";
+      deathOverlay.style.position = "absolute";
+      deathOverlay.style.top = "0";
+      deathOverlay.style.left = "0";
+      deathOverlay.style.width = "100%";
+      deathOverlay.style.height = "100%";
+      deathOverlay.style.zIndex = "50";
+      deathOverlay.style.pointerEvents = "none";
+      deathOverlay.style.backgroundColor = "rgba(255, 0, 0, 0.8)";
+      deathOverlay.style.transition = "background-color 0.5s ease-out";
+      game.appendChild(deathOverlay);
+      setTimeout(() => {
+        deathOverlay.style.backgroundColor = "rgba(255, 0, 0, 0)";
+      }, 50);
+      setTimeout(() => {
+        if (deathOverlay.parentNode) {
+          deathOverlay.parentNode.removeChild(deathOverlay);
         }
-      }
-    }
-    function breakBoulder(boulder) {
-      World.remove(world, boulder);
-      if (boulder.domElement && boulder.domElement.parentNode) {
-        boulder.domElement.parentNode.removeChild(boulder.domElement);
-      }
-      let idx = platforms.indexOf(boulder);
-      if (idx !== -1) platforms.splice(idx, 1);
-      const cols = 3, rows = 3;
-      const chunkWidth = boulder.width / cols;
-      const chunkHeight = boulder.height / rows;
-      for (let i = 0; i < rows; i++) {
-        for (let j = 0; j < cols; j++) {
-          const cx = boulder.position.x - boulder.width/2 + chunkWidth/2 + j * chunkWidth;
-          const cy = boulder.position.y - boulder.height/2 + chunkHeight/2 + i * chunkHeight;
-          let chunk = Bodies.rectangle(cx, cy, chunkWidth, chunkHeight, { isStatic: false, label: "boulderChunk" });
-          Body.setVelocity(chunk, { x: (Math.random()-0.5)*10, y: (Math.random()-0.5)*10 });
-          World.add(world, chunk);
-          const el = document.createElement("div");
-          el.className = "rock-chunk";
-          el.style.width = chunkWidth + "px";
-          el.style.height = chunkHeight + "px";
-          el.style.left = cx + "px";
-          el.style.top = cy + "px";
-          game.appendChild(el);
-          chunk.domElement = el;
-          domEntities.push(chunk);
-        }
-      }
-    }
-    function createTV(x, y, width, height) {
-      const options = { isStatic: true, label: "tv", density: 0.01 };
-      const tv = Bodies.rectangle(x + width / 2, y + height / 2, width, height, options);
-      tv.width = width;
-      tv.height = height;
-      tv.hp = 30;
-      World.add(world, tv);
-      const el = document.createElement("div");
-      el.className = "tv";
-      el.style.width = width + "px";
-      el.style.height = height + "px";
-      el.style.left = (x + width / 2) + "px";
-      el.style.top = (y + height / 2) + "px";
-      game.appendChild(el);
-      tv.domElement = el;
-      tvs.push(tv);
-      return tv;
-    }
-    for (let i = 0; i < 10; i++) {
-      const tvX = Math.random() * (levelWidth - 40);
-      const tvY = 100 + Math.random() * 200;
-      createTV(tvX, tvY, 40, 60);
-    }
-    function breakTV(tv) {
-      World.remove(world, tv);
-      if (tv.domElement && tv.domElement.parentNode) {
-        tv.domElement.parentNode.removeChild(tv.domElement);
-      }
-      const idx = tvs.indexOf(tv);
-      if (idx !== -1) { tvs.splice(idx, 1); }
-      let screenEl = document.getElementById("screen");
-      screenEl.classList.remove("shake");
-      void screenEl.offsetWidth;
-      screenEl.classList.add("shake");
-      spawnCoins(tv.position.x, tv.position.y);
-    }
-    function spawnCoins(x, y) {
-      for (let i = 0; i < 3; i++) {
-        const coin = Bodies.circle(x, y, 10, { isStatic: false, label: "coin", restitution: 0.5 });
-        coin.value = 1;
-        World.add(world, coin);
-        const el = document.createElement("div");
-        el.className = "coin";
-        el.textContent = "$";
-        el.style.width = "20px";
-        el.style.height = "20px";
-        el.style.lineHeight = "20px";
-        el.style.fontSize = "14px";
-        el.style.textAlign = "center";
-        el.style.borderRadius = "50%";
-        el.style.boxShadow = "0 0 20px 10px rgba(255,255,200,0.9)";
-        el.style.background = "gold";
-        el.style.color = "black";
-        game.appendChild(el);
-        coin.domElement = el;
-        coins.push(coin);
-        const angle = Math.random() * 2 * Math.PI;
-        const speed = Math.random() * 5 + 2;
-        Body.setVelocity(coin, { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed });
-      }
-    }
-    function spawnSpark(x, y) {
-      const spark = document.createElement("div");
-      spark.style.position = "absolute";
-      spark.style.left = x + "px";
-      spark.style.top = y + "px";
-      spark.style.width = "10px";
-      spark.style.height = "10px";
-      spark.style.background = "rgba(255,255,150,1)";
-      spark.style.borderRadius = "50%";
-      spark.style.boxShadow = "0 0 15px 5px rgba(255,255,150,0.8)";
-      spark.style.pointerEvents = "none";
-      spark.style.opacity = "1";
-      game.appendChild(spark);
-      spark.animate([
-        { transform: "scale(1)", opacity: 1 },
-        { transform: "scale(2)", opacity: 0 }
+      }, 600);
+      const koText = document.createElement("div");
+      koText.id = "koText";
+      koText.innerText = "KO";
+      koText.style.position = "absolute";
+      koText.style.top = "50%";
+      koText.style.left = "50%";
+      koText.style.transform = "translate(-50%, -50%)";
+      koText.style.fontSize = "72px";
+      koText.style.fontWeight = "bold";
+      koText.style.fontFamily = '"Impact", "Arial Black", sans-serif';
+      koText.style.color = "red";
+      koText.style.zIndex = "60";
+      koText.style.pointerEvents = "none";
+      game.appendChild(koText);
+      koText.animate([
+        { opacity: 1, transform: "translate(-50%, -50%) scale(1.5)" },
+        { opacity: 0, transform: "translate(-50%, -50%) scale(1)" }
       ], {
-        duration: 500,
+        duration: 1000,
         easing: "ease-out",
         fill: "forwards"
       });
-      setTimeout(() => { if (spark.parentNode) { spark.parentNode.removeChild(spark); } }, 500);
-    }
-    function particleBurst(x, y, color) {
-      const numParticles = 20;
-      for (let i = 0; i < numParticles; i++) {
-        const particle = document.createElement("div");
-        particle.style.position = "absolute";
-        particle.style.left = x + "px";
-        particle.style.top = y + "px";
-        particle.style.width = "4px";
-        particle.style.height = "4px";
-        particle.style.backgroundColor = color;
-        particle.style.borderRadius = "50%";
-        particle.style.pointerEvents = "none";
-        particle.style.opacity = "1";
-        particle.style.transform = "translate(-50%, -50%)";
-        game.appendChild(particle);
-        const angle = Math.random() * 2 * Math.PI;
-        const distance = Math.random() * 50 + 20;
-        const deltaX = Math.cos(angle) * distance;
-        const deltaY = Math.sin(angle) * distance;
-        particle.animate([
-          { transform: `translate(0px, 0px)`, opacity: 1 },
-          { transform: `translate(${deltaX}px, ${deltaY}px)`, opacity: 0 }
-        ], {
-          duration: 800 + Math.random() * 400,
-          easing: "ease-out",
-          fill: "forwards"
-        });
-        setTimeout(() => { if (particle.parentNode) particle.parentNode.removeChild(particle); }, 1200);
-      }
+      setTimeout(() => {
+        if (koText.parentNode) { koText.parentNode.removeChild(koText); }
+      }, 1000);
     }
 
-    // --- Dynamic Camera with Zoom ---
-    let cameraX = 0, cameraY = 0;
-    function updateCamera() {
-      const screenWidth = window.innerWidth;
-      const screenHeight = window.innerHeight;
-      
-      let points = [
-        playerChar1.torso.position,
-        playerChar2.torso.position
-      ];
-      if (enemies.length > 0) {
-        points.push(enemies[0].body.position);
-      }
-      
-      let sumX = 0, sumY = 0;
-      points.forEach(p => {
-        sumX += p.x;
-        sumY += p.y;
-      });
-      const centerX = sumX / points.length;
-      const centerY = sumY / points.length;
-      
-      const margin = 100;
-      let minX = Math.min(...points.map(p => p.x)) - margin;
-      let maxX = Math.max(...points.map(p => p.x)) + margin;
-      let minY = Math.min(...points.map(p => p.y)) - margin;
-      let maxY = Math.max(...points.map(p => p.y)) + margin;
-      
-      const boxWidth = maxX - minX;
-      const boxHeight = maxY - minY;
-      
-      const scaleX = screenWidth / boxWidth;
-      const scaleY = screenHeight / boxHeight;
-      let scale = Math.min(scaleX, scaleY, 1);
-      
-      let camX = centerX - screenWidth / (2 * scale);
-      let camY = centerY - screenHeight / (2 * scale);
-      
-      camX = Math.max(0, Math.min(camX, levelWidth - screenWidth / scale));
-      camY = Math.max(0, Math.min(camY, gameHeight - screenHeight / scale));
-      
-      cameraX = camX;
-      cameraY = camY;
-      
-      game.style.transformOrigin = "top left";
-      game.style.transform = `translate(-${cameraX}px, -${cameraY}px) scale(${scale})`;
-      document.getElementById("parallax").style.backgroundPosition = (-cameraX * 0.5) + "px 0";
+    function triggerScreenshake() {
+      const screenEl = document.getElementById("screen");
+      screenEl.classList.remove("shake");
+      void screenEl.offsetWidth;
+      screenEl.classList.add("shake");
     }
 
-    // --- Gamepad Support ---
-    let lastGamepadButtonState = {};
-    window.addEventListener("gamepadconnected", (e) => {
-      console.log("Gamepad connected:", e.gamepad);
-      const controls = document.getElementById("controls");
-      if (controls) { controls.style.display = "none"; }
-    });
-    window.addEventListener("gamepaddisconnected", (e) => {
-      console.log("Gamepad disconnected:", e.gamepad);
-      delete lastGamepadButtonState[e.gamepad.index];
-      const gamepads = navigator.getGamepads();
-      let connected = false;
-      for (let i = 0; i < gamepads.length; i++) {
-        if (gamepads[i]) { connected = true; break; }
-      }
-      if (!connected) {
-        const controls = document.getElementById("controls");
-        if (controls) { controls.style.display = "flex"; }
-      }
-    });
-    function updateGamepadInput() {
-      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-      const threshold = 0.2;
-      for (let i = 0; i < gamepads.length; i++) {
-        const gp = gamepads[i];
-        if (!gp) continue;
-        if (gp.index === 0) {
-          if (gp.axes[0] < -threshold) {
-            keys1["ArrowLeft"] = true; keys1["ArrowRight"] = false;
-          } else if (gp.axes[0] > threshold) {
-            keys1["ArrowRight"] = true; keys1["ArrowLeft"] = false;
-          } else { keys1["ArrowLeft"] = false; keys1["ArrowRight"] = false; }
-          keys1["ArrowUp"] = false;
-          keys1["Space"] = (gp.buttons[0] && gp.buttons[0].pressed) || (gp.buttons[11] && gp.buttons[11].pressed);
-          let rx = gp.axes[2], ry = gp.axes[3];
-          let rmag = Math.hypot(rx, ry);
-          if (rmag > threshold) { joystickAim1.x = rx / rmag; joystickAim1.y = ry / rmag; }
-          else { joystickAim1.x = 0; joystickAim1.y = 0; }
-          if (!lastGamepadButtonState[gp.index]) {
-            lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
-          }
-          const shootPressed = (gp.buttons[1].pressed || gp.buttons[7].pressed);
-          const shootWasPressed = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
-          if (shootPressed && !shootWasPressed) {
-            playerShoot(playerChar1, keys1, joystickAim1);
-          }
-          const meleePressed = (gp.buttons[2].pressed || gp.buttons[6].pressed);
-          const meleeWasPressed = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
-          if (meleePressed && !meleeWasPressed) {
-            meleeAttack(playerChar1, keys1, joystickAim1);
-          }
-          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
-        } else if (gp.index === 1) {
-          if (gp.axes[0] < -threshold) {
-            keys2["ArrowLeft"] = true; keys2["ArrowRight"] = false;
-          } else if (gp.axes[0] > threshold) {
-            keys2["ArrowRight"] = true; keys2["ArrowLeft"] = false;
-          } else { keys2["ArrowLeft"] = false; keys2["ArrowRight"] = false; }
-          keys2["ArrowUp"] = false;
-          keys2["Space"] = (gp.buttons[0].pressed || gp.buttons[11].pressed);
-          let rx = gp.axes[2], ry = gp.axes[3];
-          let rmag = Math.hypot(rx, ry);
-          if (rmag > threshold) { joystickAim2.x = rx / rmag; joystickAim2.y = ry / rmag; }
-          else { joystickAim2.x = 0; joystickAim2.y = 0; }
-          if (!lastGamepadButtonState[gp.index]) {
-            lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
-          }
-          const shootPressed2 = (gp.buttons[1].pressed || gp.buttons[7].pressed);
-          const shootWasPressed2 = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
-          if (shootPressed2 && !shootWasPressed2) {
-            playerShoot(playerChar2, keys2, joystickAim2);
-          }
-          const meleePressed2 = (gp.buttons[2].pressed || gp.buttons[6].pressed);
-          const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
-          if (meleePressed2 && !meleeWasPressed2) {
-            meleeAttack(playerChar2, keys2, joystickAim2);
-          }
-          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
+    function checkEnemyOutOfBounds() {
+      enemies.slice().forEach(enemy => {
+        const pos = enemy.body.position;
+        const outHorizontally = pos.x < 0 || pos.x > levelWidth;
+        const outBelowSafety = pos.y > safetyFloorY;
+        const groundCenter = (playAreaHeight - 20) + (groundExtraHeight / 2);
+        const groundPenetration = pos.y > groundCenter && enemy.body.speed > 3;
+        if (outHorizontally || outBelowSafety || groundPenetration) {
+          triggerOutEffect();
+          removeEnemy(enemy.body);
+          setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
         }
+      });
+    }
+
+    function triggerOutEffect() {
+      const outText = document.createElement("div");
+      outText.id = "outText";
+      outText.innerText = "OUT!";
+      outText.style.position = "absolute";
+      outText.style.top = "50%";
+      outText.style.left = "50%";
+      outText.style.transform = "translate(-50%, -50%)";
+      outText.style.fontSize = "72px";
+      outText.style.fontWeight = "bold";
+      outText.style.fontFamily = '"Impact", "Arial Black", sans-serif';
+      outText.style.color = "red";
+      outText.style.zIndex = "60";
+      outText.style.pointerEvents = "none";
+      game.appendChild(outText);
+      
+      const screenEl = document.getElementById("screen");
+      screenEl.classList.remove("shake");
+      void screenEl.offsetWidth;
+      screenEl.classList.add("shake");
+      
+      outText.classList.add("goalTextAnimation");
+      setTimeout(() => {
+        if (outText.parentNode) {
+          outText.parentNode.removeChild(outText);
+        }
+      }, 1000);
+    }
+
+    // --- Auto Respawn Helper ---
+    function respawnPlayer(player) {
+      const parts = [player.head, player.torso, player.rightUpperArm, player.rightHand, player.leftUpperArm, player.leftHand, player.rightUpperLeg, player.rightFoot, player.leftUpperLeg, player.leftFoot];
+      parts.forEach(part => {
+        World.remove(world, part);
+        if (part.domElement && part.domElement.parentNode) {
+          part.domElement.parentNode.removeChild(part.domElement);
+        }
+      });
+      if (player.hpContainer && player.hpContainer.parentNode) {
+        player.hpContainer.parentNode.removeChild(player.hpContainer);
       }
     }
+
     // --- Main Game Loop ---
     function update() {
       const now = Date.now();
@@ -1487,34 +1034,25 @@ function triggerOutEffect() {
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: 0.01, y: 0 });
       }
       // --- Springy Jump for Player One ---
-      // Initiate jump if key pressed, player is near the ground, and jump is ready.
-      if ((keys1["KeyB"] || keys1["Space"])) {
-        if (playerChar1.jumpReady && playerChar1.torso.position.y >= playAreaHeight - 60) {
-          playerChar1.jumpTimer = 0.15;  // total duration (in seconds) of jump force
-          playerChar1.jumpReady = false;
-        }
-      } else {
-        // When jump key is released, reset the jump timer
-        playerChar1.jumpTimer = 0;
-        // If near the ground, allow a new jump
-        if (playerChar1.torso.position.y >= playAreaHeight - 60) {
-          playerChar1.jumpReady = true;
-        }
+      if ((keys1["KeyB"] || keys1["Space"]) && playerChar1.jumpReady && playerChar1.torso.position.y >= playAreaHeight - 60) {
+        playerChar1.jumpCounter = 10;  // number of frames for jump impulse
+        playerChar1.jumpReady = false;
       }
-      // If jumpTimer is active, apply a decaying upward (and horizontal) force
-      if (playerChar1.jumpTimer > 0) {
-        const baseJumpForce = 0.09; // adjust this for a stronger springy impulse
+      if (playerChar1.jumpCounter > 0) {
+        const baseJumpForce = 0.09;
         let horizontalInput = 0;
         if (keys1["ArrowLeft"])  horizontalInput -= 1;
         if (keys1["ArrowRight"]) horizontalInput += 1;
         if (Math.abs(joystickAim1.x) > 0.1) horizontalInput = joystickAim1.x;
-        // Decay factor (from 1 to 0)
-        const decay = playerChar1.jumpTimer / 0.15;
+        const decay = playerChar1.jumpCounter / 10;
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, {
           x: horizontalInput * baseJumpForce * decay,
           y: -baseJumpForce * decay
         });
-        playerChar1.jumpTimer -= dt;
+        playerChar1.jumpCounter--;
+      }
+      if (!(keys1["KeyB"] || keys1["Space"]) && playerChar1.torso.position.y >= playAreaHeight - 60) {
+        playerChar1.jumpReady = true;
       }
 
       // ----- PLAYER TWO MOVEMENT -----
@@ -1526,29 +1064,25 @@ function triggerOutEffect() {
         playerChar2.facing = "right";
         Body.applyForce(playerChar2.torso, playerChar2.torso.position, { x: 0.01, y: 0 });
       }
-      if (keys2["Space"]) {
-        if (playerChar2.jumpReady && playerChar2.torso.position.y >= playAreaHeight - 60) {
-          playerChar2.jumpTimer = 0.15;
-          playerChar2.jumpReady = false;
-        }
-      } else {
-        playerChar2.jumpTimer = 0;
-        if (playerChar2.torso.position.y >= playAreaHeight - 60) {
-          playerChar2.jumpReady = true;
-        }
+      if (keys2["Space"] && playerChar2.jumpReady && playerChar2.torso.position.y >= playAreaHeight - 60) {
+        playerChar2.jumpCounter = 10;
+        playerChar2.jumpReady = false;
       }
-      if (playerChar2.jumpTimer > 0) {
+      if (playerChar2.jumpCounter > 0) {
         const baseJumpForce = 0.09;
         let horizontalInput = 0;
         if (keys2["ArrowLeft"])  horizontalInput -= 1;
         if (keys2["ArrowRight"]) horizontalInput += 1;
         if (Math.abs(joystickAim2.x) > 0.1) horizontalInput = joystickAim2.x;
-        const decay = playerChar2.jumpTimer / 0.15;
+        const decay = playerChar2.jumpCounter / 10;
         Body.applyForce(playerChar2.torso, playerChar2.torso.position, {
           x: horizontalInput * baseJumpForce * decay,
           y: -baseJumpForce * decay
         });
-        playerChar2.jumpTimer -= dt;
+        playerChar2.jumpCounter--;
+      }
+      if (!keys2["Space"] && playerChar2.torso.position.y >= playAreaHeight - 60) {
+        playerChar2.jumpReady = true;
       }
 
       // ----- Air Steering for Player One -----
@@ -1687,87 +1221,6 @@ function triggerOutEffect() {
         character.hpBar.style.width = (hpPercentage * containerWidth) + "px";
       })(playerChar2);
       
-      function triggerDeathEffect() {
-        let existingOverlay = document.getElementById("deathOverlay");
-        if (existingOverlay) {
-          existingOverlay.parentNode.removeChild(existingOverlay);
-        }
-        const deathOverlay = document.createElement("div");
-        deathOverlay.id = "deathOverlay";
-        deathOverlay.style.position = "absolute";
-        deathOverlay.style.top = "0";
-        deathOverlay.style.left = "0";
-        deathOverlay.style.width = "100%";
-        deathOverlay.style.height = "100%";
-        deathOverlay.style.zIndex = "50";
-        deathOverlay.style.pointerEvents = "none";
-        deathOverlay.style.backgroundColor = "rgba(255, 0, 0, 0.8)";
-        deathOverlay.style.transition = "background-color 0.5s ease-out";
-        game.appendChild(deathOverlay);
-        setTimeout(() => {
-          deathOverlay.style.backgroundColor = "rgba(255, 0, 0, 0)";
-        }, 50);
-        setTimeout(() => {
-          if (deathOverlay.parentNode) {
-            deathOverlay.parentNode.removeChild(deathOverlay);
-          }
-        }, 600);
-        const koText = document.createElement("div");
-        koText.id = "koText";
-        koText.innerText = "KO";
-        koText.style.position = "absolute";
-        koText.style.top = "50%";
-        koText.style.left = "50%";
-        koText.style.transform = "translate(-50%, -50%)";
-        koText.style.fontSize = "72px";
-        koText.style.fontWeight = "bold";
-        koText.style.fontFamily = '"Impact", "Arial Black", sans-serif';
-        koText.style.color = "red";
-        koText.style.zIndex = "60";
-        koText.style.pointerEvents = "none";
-        game.appendChild(koText);
-        koText.animate([
-          { opacity: 1, transform: "translate(-50%, -50%) scale(1.5)" },
-          { opacity: 0, transform: "translate(-50%, -50%) scale(1)" }
-        ], {
-          duration: 1000,
-          easing: "ease-out",
-          fill: "forwards"
-        });
-        setTimeout(() => {
-          if (koText.parentNode) { koText.parentNode.removeChild(koText); }
-        }, 1000);
-      }
-      if (playerChar1.hp <= 0 && !playerChar1.isDying) {
-        playerChar1.isDying = true;
-        setTimeout(() => { 
-          digitalPixelExplosion(playerChar1.torso.position.x, playerChar1.torso.position.y);
-          triggerScreenshake();
-          triggerDeathEffect();  
-          respawnPlayer(playerChar1);
-          playerChar1 = createCharacter(playerChar1.spawn.x, playerChar1.spawn.y);
-          addPlayerClass(playerChar1, "player1");
-        }, 1000);
-      }
-      if (playerChar2.hp <= 0 && !playerChar2.isDying) {
-        playerChar2.isDying = true;
-        setTimeout(() => {
-          digitalPixelExplosion(playerChar2.torso.position.x, playerChar2.torso.position.y);
-          triggerScreenshake();
-          triggerDeathEffect();  
-          respawnPlayer(playerChar2);
-          playerChar2 = createCharacter(playerChar2.spawn.x, playerChar2.spawn.y);
-          addPlayerClass(playerChar2, "player2");
-        }, 1000);
-      }
-      enemies.forEach(enemy => {
-        enemy.update();
-        if (enemy.body.domElement) {
-          enemy.body.domElement.style.left = enemy.body.position.x + "px";
-          enemy.body.domElement.style.top = enemy.body.position.y + "px";
-          enemy.body.domElement.style.transform = "translate(-50%, -50%) rotate(" + enemy.body.angle + "rad)";
-        }
-      });
       checkEnemyOutOfBounds();
       updateCamera();
       requestAnimationFrame(update);
@@ -1839,6 +1292,69 @@ function triggerOutEffect() {
     document.addEventListener('keyup', (e) => {
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { player.style.transform = "translate(-50%, -50%)"; }
     });
+
+    // --- Gamepad Support ---
+    function updateGamepadInput() {
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const threshold = 0.2;
+      for (let i = 0; i < gamepads.length; i++) {
+        const gp = gamepads[i];
+        if (!gp) continue;
+        if (gp.index === 0) {
+          if (gp.axes[0] < -threshold) {
+            keys1["ArrowLeft"] = true; keys1["ArrowRight"] = false;
+          } else if (gp.axes[0] > threshold) {
+            keys1["ArrowRight"] = true; keys1["ArrowLeft"] = false;
+          } else { keys1["ArrowLeft"] = false; keys1["ArrowRight"] = false; }
+          keys1["ArrowUp"] = false;
+          keys1["Space"] = (gp.buttons[0] && gp.buttons[0].pressed) || (gp.buttons[11] && gp.buttons[11].pressed);
+          let rx = gp.axes[2], ry = gp.axes[3];
+          let rmag = Math.hypot(rx, ry);
+          if (rmag > threshold) { joystickAim1.x = rx / rmag; joystickAim1.y = ry / rmag; }
+          else { joystickAim1.x = 0; joystickAim1.y = 0; }
+          if (!lastGamepadButtonState[gp.index]) {
+            lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
+          }
+          const shootPressed = (gp.buttons[1].pressed || gp.buttons[7].pressed);
+          const shootWasPressed = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
+          if (shootPressed && !shootWasPressed) {
+            playerShoot(playerChar1, keys1, joystickAim1);
+          }
+          const meleePressed = (gp.buttons[2].pressed || gp.buttons[6].pressed);
+          const meleeWasPressed = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
+          if (meleePressed && !meleeWasPressed) {
+            meleeAttack(playerChar1, keys1, joystickAim1);
+          }
+          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
+        } else if (gp.index === 1) {
+          if (gp.axes[0] < -threshold) {
+            keys2["ArrowLeft"] = true; keys2["ArrowRight"] = false;
+          } else if (gp.axes[0] > threshold) {
+            keys2["ArrowRight"] = true; keys2["ArrowLeft"] = false;
+          } else { keys2["ArrowLeft"] = false; keys2["ArrowRight"] = false; }
+          keys2["ArrowUp"] = false;
+          keys2["Space"] = (gp.buttons[0].pressed || gp.buttons[11].pressed);
+          let rx = gp.axes[2], ry = gp.axes[3];
+          let rmag = Math.hypot(rx, ry);
+          if (rmag > threshold) { joystickAim2.x = rx / rmag; joystickAim2.y = ry / rmag; }
+          else { joystickAim2.x = 0; joystickAim2.y = 0; }
+          if (!lastGamepadButtonState[gp.index]) {
+            lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
+          }
+          const shootPressed2 = (gp.buttons[1].pressed || gp.buttons[7].pressed);
+          const shootWasPressed2 = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
+          if (shootPressed2 && !shootWasPressed2) {
+            playerShoot(playerChar2, keys2, joystickAim2);
+          }
+          const meleePressed2 = (gp.buttons[2].pressed || gp.buttons[6].pressed);
+          const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
+          if (meleePressed2 && !meleeWasPressed2) {
+            meleeAttack(playerChar2, keys2, joystickAim2);
+          }
+          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
+        }
+      }
+    }
   </script>
 </body>
 </html>
