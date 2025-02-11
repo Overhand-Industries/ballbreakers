@@ -33,7 +33,8 @@
     /* Screen – contains the game world and parallax background */
     #screen {
       position: absolute;
-      top: 0; left: 0;
+      top: 0;
+      left: 0;
       width: 100vw;
       height: 100vh;
       background: #000;
@@ -53,7 +54,8 @@
     /* Game World Container – camera transform applied */
     #game {
       position: absolute;
-      top: 0; left: 0;
+      top: 0;
+      left: 0;
       z-index: 1;
     }
     /* Ground styling */
@@ -62,7 +64,7 @@
       left: 0;
       background: #0d0c29;
     }
-    /* Controls – auto-sized below ground line */
+    /* Controls */
     #controls {
       position: absolute;
       left: 0;
@@ -81,7 +83,6 @@
       width: 150px;
       height: 150px;
     }
-    /* Directional buttons */
     #dpad button {
       position: absolute;
       background: #333;
@@ -121,7 +122,6 @@
       justify-content: space-around;
       align-items: flex-end;
     }
-    /* Staggered positions for buttons */
     #ab-buttons button:nth-child(1) { transform: translateY(-30px); }
     #ab-buttons button:nth-child(2) { transform: translateY(-10px); }
     #ab-buttons button:nth-child(3) { transform: translateY(-20px); }
@@ -159,7 +159,7 @@
       background: lime;
       border-radius: 3px;
     }
-    /* Player parts as circles (“bubbles”) */
+    /* Player parts styling */
     .player-part {
       transform-origin: center;
       background: #fff;
@@ -312,8 +312,7 @@
     .goal-wall {
       background: #0d0c29;
     }
-    
-    /* --- NEW: Player-Specific Overrides (CSS Only) --- */
+    /* --- Player-Specific CSS Overrides --- */
     .player-part.player1::after {
       background: url('overlay5.gif') center/cover no-repeat;
     }
@@ -378,14 +377,13 @@
     // Global Variables & Setup
     const game = document.getElementById("game");
     let engine = Engine.create();
-    // Increase gravity for a weightier feel
-    engine.world.gravity.y = 5;
+    engine.world.gravity.y = 5; // Increase gravity for a weightier feel
     const world = engine.world;
     let tvs = [];
     let domEntities = [], platforms = [], walls = [], coins = [], bullets = [], enemies = [];
     let leftScore = 0, rightScore = 0;
 
-    // Separate input objects for player one and player two
+    // Player input objects
     let keys1 = {}, keys2 = {};
     let joystickAim1 = { x: 0, y: 0 }, joystickAim2 = { x: 0, y: 0 };
     let walkCycle1 = 0, walkCycle2 = 0;
@@ -425,7 +423,7 @@
     function createPlatform(x, y, width, height) {
       const slope = Math.random() * 0.4 + 0.3;
       const options = { isStatic: true, label: "platform", density: 0.01 };
-      const boulder = Bodies.trapezoid(x + width/2, y + height/2, width, height, slope, options);
+      const boulder = Bodies.trapezoid(x + width / 2, y + height / 2, width, height, slope, options);
       boulder.width = width;
       boulder.height = height;
       boulder.hp = 50;
@@ -434,8 +432,8 @@
       el.className = "boulder";
       el.style.width = width + "px";
       el.style.height = height + "px";
-      el.style.left = (x + width/2) + "px";
-      el.style.top = (y + height/2) + "px";
+      el.style.left = (x + width / 2) + "px";
+      el.style.top = (y + height / 2) + "px";
       el.style.backgroundColor = "#0d0c29";
       const topClipPercent = slope * 50;
       el.style.clipPath = `polygon(0% 100%, 100% 100%, ${100 - topClipPercent}% 0%, ${topClipPercent}% 0%)`;
@@ -447,9 +445,9 @@
     /* --- Walls (Stalactites/Stalagmites) --- */
     function createWall(x, y, width, height) {
       let body, el;
-      if (y < playAreaHeight/2) {
-        const vertices = [ { x: -width/2, y: 0 }, { x: width/2, y: 0 }, { x: 0, y: height } ];
-        body = Bodies.fromVertices(x + width/2, height/3, [vertices], { isStatic: true, label: "wall" }, true);
+      if (y < playAreaHeight / 2) {
+        const vertices = [{ x: -width / 2, y: 0 }, { x: width / 2, y: 0 }, { x: 0, y: height }];
+        body = Bodies.fromVertices(x + width / 2, height / 3, [vertices], { isStatic: true, label: "wall" }, true);
         body.width = width;
         body.height = height;
         body.hp = 100;
@@ -458,13 +456,13 @@
         el.className = "stalactite";
         el.style.width = width + "px";
         el.style.height = height + "px";
-        el.style.left = (x + width/2) + "px";
-        el.style.top = (height/3) + "px";
+        el.style.left = (x + width / 2) + "px";
+        el.style.top = (height / 3) + "px";
         el.style.backgroundColor = "#0d0c29";
         el.style.clipPath = "polygon(50% 100%, 0% 0%, 100% 0%)";
       } else {
-        const vertices = [ { x: -width/2, y: 0 }, { x: width/2, y: 0 }, { x: 0, y: -height } ];
-        body = Bodies.fromVertices(x + width/2, playAreaHeight - height/3, [vertices], { isStatic: true, label: "wall" }, true);
+        const vertices = [{ x: -width / 2, y: 0 }, { x: width / 2, y: 0 }, { x: 0, y: -height }];
+        body = Bodies.fromVertices(x + width / 2, playAreaHeight - height / 3, [vertices], { isStatic: true, label: "wall" }, true);
         body.width = width;
         body.height = height;
         body.hp = 100;
@@ -473,8 +471,8 @@
         el.className = "stalagmite";
         el.style.width = width + "px";
         el.style.height = height + "px";
-        el.style.left = (x + width/2) + "px";
-        el.style.top = (playAreaHeight - height/3) + "px";
+        el.style.left = (x + width / 2) + "px";
+        el.style.top = (playAreaHeight - height / 3) + "px";
         el.style.backgroundColor = "#0d0c29";
         el.style.clipPath = "polygon(50% 0%, 0% 100%, 100% 100%)";
       }
@@ -508,8 +506,8 @@
 
     // Create Goal Sensors
     const goalWidth = 20, goalHeight = 200;
-    const leftGoal = Bodies.rectangle(50, playAreaHeight/2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "leftGoal" });
-    const rightGoal = Bodies.rectangle(levelWidth - 50, playAreaHeight/2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "rightGoal" });
+    const leftGoal = Bodies.rectangle(50, playAreaHeight / 2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "leftGoal" });
+    const rightGoal = Bodies.rectangle(levelWidth - 50, playAreaHeight / 2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "rightGoal" });
     World.add(world, [leftGoal, rightGoal]);
     function createGoalDom(goalBody, cls) {
       const el = document.createElement("div");
@@ -521,14 +519,12 @@
       game.appendChild(el);
       goalBody.domElement = el;
     }
-
     createGoalDom(leftGoal, "left");
     createGoalDom(rightGoal, "right");
     // Create non-passable walls behind each goal
     const wallThickness = 50;
     const fullHeight = playAreaHeight + 2;
     const wallCenterY = fullHeight / 2;
-
     const leftGoalWall = Bodies.rectangle(
       leftGoal.position.x - (goalWidth / 2 + wallThickness / 2 + 20),
       wallCenterY,
@@ -537,7 +533,6 @@
       { isStatic: true, label: "leftGoalWall" }
     );
     World.add(world, leftGoalWall);
-
     const rightGoalWall = Bodies.rectangle(
       rightGoal.position.x + (goalWidth / 2 + wallThickness / 2 + 20),
       wallCenterY,
@@ -546,7 +541,6 @@
       { isStatic: true, label: "rightGoalWall" }
     );
     World.add(world, rightGoalWall);
-
     function createWallDom(wallBody, cls) {
       const el = document.createElement("div");
       el.className = "goal-wall " + cls;
@@ -560,7 +554,6 @@
       game.appendChild(el);
       wallBody.domElement = el;
     }
-
     createWallDom(leftGoalWall, "left");
     createWallDom(rightGoalWall, "right");
 
@@ -597,7 +590,7 @@
       char.facing = "right";
       // Jump properties for springy multi-frame impulse
       char.jumpReady = true;
-      char.jumpCounter = 0;  // counts frames of jump impulse
+      char.jumpCounter = 0;  // number of frames for which jump impulse is applied
       const size = 20;
       const torsoOptions = { friction: 6.0, frictionAir: 0.11, restitution: 0 };
       const defaultOptions = { friction: 0.5, frictionAir: 0.01, restitution: 0 };
@@ -615,7 +608,7 @@
         createDomElement(body, cls, w, h);
         body.character = char;
         if (cls.indexOf("head") !== -1) {
-          attachTentacleToBody(body, { x: 0, y: size/2 }, 5, 10, 2);
+          attachTentacleToBody(body, { x: 0, y: size / 2 }, 5, 10, 2);
           const eyeLeft = document.createElement("div");
           eyeLeft.className = "eye left";
           const eyeRight = document.createElement("div");
@@ -656,34 +649,35 @@
         });
         World.add(world, con);
       }
-      link(head, torso, { x: 0, y: size/2 }, { x: 0, y: -size });
+      link(head, torso, { x: 0, y: size / 2 }, { x: 0, y: -size });
       link(torso, rightUpperArm, { x: size, y: 0 }, { x: 0, y: 0 });
       link(rightUpperArm, rightHand, { x: 0, y: 0 }, { x: 0, y: -20 });
       link(torso, leftUpperArm, { x: -size, y: 0 }, { x: 0, y: 0 });
       link(leftUpperArm, leftHand, { x: 0, y: 0 }, { x: 0, y: -20 });
-      link(torso, rightUpperLeg, { x: 10, y: size }, { x: 0, y: -size/2 });
+      link(torso, rightUpperLeg, { x: 10, y: size }, { x: 0, y: -size / 2 });
       link(rightUpperLeg, rightFoot, { x: 0, y: 0 }, { x: 0, y: -20 });
-      link(torso, leftUpperLeg, { x: -10, y: size }, { x: 0, y: -size/2 });
+      link(torso, leftUpperLeg, { x: -10, y: size }, { x: 0, y: -size / 2 });
       link(leftUpperLeg, leftFoot, { x: 0, y: 0 }, { x: 0, y: -20 });
 
-      char.head = head; 
+      char.head = head;
       char.torso = torso;
-      char.rightUpperArm = rightUpperArm; 
+      char.rightUpperArm = rightUpperArm;
       char.rightHand = rightHand;
-      char.leftUpperArm = leftUpperArm; 
+      char.leftUpperArm = leftUpperArm;
       char.leftHand = leftHand;
-      char.rightUpperLeg = rightUpperLeg; 
+      char.rightUpperLeg = rightUpperLeg;
       char.rightFoot = rightFoot;
-      char.leftUpperLeg = leftUpperLeg; 
+      char.leftUpperLeg = leftUpperLeg;
       char.leftFoot = leftFoot;
 
       return char;
     }
+
     // Create two players
     let playerChar1 = createCharacter(100, playAreaHeight / 2);
     let playerChar2 = createCharacter(levelWidth - 100, playAreaHeight / 2);
 
-    // --- NEW: Add extra CSS classes for distinct styling ---
+    // --- Add extra CSS classes for distinct styling ---
     function addPlayerClass(player, className) {
       let parts = [player.head, player.torso, player.rightUpperArm, player.rightHand,
                    player.leftUpperArm, player.leftHand, player.rightUpperLeg, player.rightFoot,
@@ -705,9 +699,9 @@
         state: "patrol",
         direction: Math.random() < 0.5 ? -1 : 1
       };
-      enemy.body = Bodies.circle(x, y, 20, { 
-        friction: 0.5, 
-        frictionAir: 0.05, 
+      enemy.body = Bodies.circle(x, y, 20, {
+        friction: 0.5,
+        frictionAir: 0.05,
         restitution: 0.9,
         label: "enemy",
         isBullet: true
@@ -804,8 +798,7 @@
       }
     }
 
-    // --- Helper Functions for Melee ---
-    // Returns true if the target position is within the cone defined by origin, direction, range, and angle threshold.
+    // --- Helper Function for Melee (Cone Check) ---
     function isWithinCone(origin, direction, targetPos, range, angleThreshold) {
       const vector = { x: targetPos.x - origin.x, y: targetPos.y - origin.y };
       const distance = Math.hypot(vector.x, vector.y);
@@ -819,18 +812,16 @@
 
     // --- Core Melee Attack Function ---
     function meleeAttack(player, keys, joystickAim) {
-      // 1. Compute the attack direction from input.
+      // 1. Compute the attack direction.
       let inputDir = { x: 0, y: 0 };
       if (keys["ArrowLeft"])  inputDir.x -= 1;
       if (keys["ArrowRight"]) inputDir.x += 1;
       if (keys["ArrowUp"])    inputDir.y -= 1;
       if (keys["ArrowDown"])  inputDir.y += 1;
-      // Use joystick input if no keyboard input is provided.
       if (inputDir.x === 0 && inputDir.y === 0 && Math.hypot(joystickAim.x, joystickAim.y) > 0.1) {
         inputDir.x = joystickAim.x;
         inputDir.y = joystickAim.y;
       }
-      // Default to upward if still zero.
       if (inputDir.x === 0 && inputDir.y === 0) {
         inputDir = { x: 0, y: -1 };
       } else {
@@ -839,17 +830,17 @@
         inputDir.y /= mag;
       }
       const attackDir = inputDir;
-      
-      // 2. Choose the attacking hand and use the corresponding upper arm's position as the origin.
+
+      // 2. Choose attacking hand and origin.
       const attackHand = (attackDir.x < 0) ? player.leftHand : player.rightHand;
       const attackOrigin = (attackDir.x < 0) ? player.leftUpperArm.position : player.rightUpperArm.position;
-      
+
       // 3. Set melee parameters.
-      const meleeRange = 80;             // effective range (pixels)
-      const damageAmount = 40;           // damage dealt
-      const angleThreshold = Math.PI / 4; // 45° cone
-      
-      // 4. Process damage on targets (platforms, walls, enemies).
+      const meleeRange = 80;
+      const damageAmount = 40;
+      const angleThreshold = Math.PI / 4;
+
+      // 4. Process damage on targets.
       let hitSomething = false;
       const targets = [].concat(platforms, walls, enemies.map(e => e.body));
       targets.forEach(obj => {
@@ -858,14 +849,11 @@
           const dx = obj.position.x - attackOrigin.x;
           const dy = obj.position.y - attackOrigin.y;
           const dist = Math.hypot(dx, dy) || 1;
-          Body.applyForce(obj, obj.position, { 
-            x: (dx / dist) * 0.05, 
-            y: (dy / dist) * 0.05 
-          });
+          Body.applyForce(obj, obj.position, { x: (dx / dist) * 0.05, y: (dy / dist) * 0.05 });
           hitSomething = true;
         }
       });
-      
+
       // 5. Process player vs. player damage.
       [playerChar1, playerChar2].forEach(p => {
         if (p !== player) {
@@ -874,10 +862,7 @@
             const dx = p.torso.position.x - attackOrigin.x;
             const dy = p.torso.position.y - attackOrigin.y;
             const dist = Math.hypot(dx, dy) || 1;
-            Body.applyForce(p.torso, p.torso.position, { 
-              x: (dx / dist) * 0.05, 
-              y: (dy / dist) * 0.05 
-            });
+            Body.applyForce(p.torso, p.torso.position, { x: (dx / dist) * 0.05, y: (dy / dist) * 0.05 });
             hitSomething = true;
             if (p.hp <= 0 && !p.isDying) {
               p.isDying = true;
@@ -886,8 +871,8 @@
           }
         }
       });
-      
-      // 6. Trigger a screenshake if any target was hit.
+
+      // 6. Trigger screenshake if anything was hit.
       if (hitSomething) {
         triggerScreenshake();
       }
@@ -911,14 +896,8 @@
       deathOverlay.style.backgroundColor = "rgba(255, 0, 0, 0.8)";
       deathOverlay.style.transition = "background-color 0.5s ease-out";
       game.appendChild(deathOverlay);
-      setTimeout(() => {
-        deathOverlay.style.backgroundColor = "rgba(255, 0, 0, 0)";
-      }, 50);
-      setTimeout(() => {
-        if (deathOverlay.parentNode) {
-          deathOverlay.parentNode.removeChild(deathOverlay);
-        }
-      }, 600);
+      setTimeout(() => { deathOverlay.style.backgroundColor = "rgba(255, 0, 0, 0)"; }, 50);
+      setTimeout(() => { if (deathOverlay.parentNode) deathOverlay.parentNode.removeChild(deathOverlay); }, 600);
       const koText = document.createElement("div");
       koText.id = "koText";
       koText.innerText = "KO";
@@ -936,14 +915,8 @@
       koText.animate([
         { opacity: 1, transform: "translate(-50%, -50%) scale(1.5)" },
         { opacity: 0, transform: "translate(-50%, -50%) scale(1)" }
-      ], {
-        duration: 1000,
-        easing: "ease-out",
-        fill: "forwards"
-      });
-      setTimeout(() => {
-        if (koText.parentNode) { koText.parentNode.removeChild(koText); }
-      }, 1000);
+      ], { duration: 1000, easing: "ease-out", fill: "forwards" });
+      setTimeout(() => { if (koText.parentNode) koText.parentNode.removeChild(koText); }, 1000);
     }
 
     function triggerScreenshake() {
@@ -990,16 +963,14 @@
       screenEl.classList.add("shake");
       
       outText.classList.add("goalTextAnimation");
-      setTimeout(() => {
-        if (outText.parentNode) {
-          outText.parentNode.removeChild(outText);
-        }
-      }, 1000);
+      setTimeout(() => { if (outText.parentNode) outText.parentNode.removeChild(outText); }, 1000);
     }
 
     // --- Auto Respawn Helper ---
     function respawnPlayer(player) {
-      const parts = [player.head, player.torso, player.rightUpperArm, player.rightHand, player.leftUpperArm, player.leftHand, player.rightUpperLeg, player.rightFoot, player.leftUpperLeg, player.leftFoot];
+      const parts = [player.head, player.torso, player.rightUpperArm, player.rightHand,
+                     player.leftUpperArm, player.leftHand, player.rightUpperLeg, player.rightFoot,
+                     player.leftUpperLeg, player.leftFoot];
       parts.forEach(part => {
         World.remove(world, part);
         if (part.domElement && part.domElement.parentNode) {
@@ -1009,6 +980,55 @@
       if (player.hpContainer && player.hpContainer.parentNode) {
         player.hpContainer.parentNode.removeChild(player.hpContainer);
       }
+    }
+
+    // --- Dynamic Camera with Zoom ---
+    let cameraX = 0, cameraY = 0;
+    function updateCamera() {
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+      
+      let points = [
+        playerChar1.torso.position,
+        playerChar2.torso.position
+      ];
+      if (enemies.length > 0) {
+        points.push(enemies[0].body.position);
+      }
+      
+      let sumX = 0, sumY = 0;
+      points.forEach(p => {
+        sumX += p.x;
+        sumY += p.y;
+      });
+      const centerX = sumX / points.length;
+      const centerY = sumY / points.length;
+      
+      const margin = 100;
+      let minX = Math.min(...points.map(p => p.x)) - margin;
+      let maxX = Math.max(...points.map(p => p.x)) + margin;
+      let minY = Math.min(...points.map(p => p.y)) - margin;
+      let maxY = Math.max(...points.map(p => p.y)) + margin;
+      
+      const boxWidth = maxX - minX;
+      const boxHeight = maxY - minY;
+      
+      const scaleX = screenWidth / boxWidth;
+      const scaleY = screenHeight / boxHeight;
+      let scale = Math.min(scaleX, scaleY, 1);
+      
+      let camX = centerX - screenWidth / (2 * scale);
+      let camY = centerY - screenHeight / (2 * scale);
+      
+      camX = Math.max(0, Math.min(camX, levelWidth - screenWidth / scale));
+      camY = Math.max(0, Math.min(camY, gameHeight - screenHeight / scale));
+      
+      cameraX = camX;
+      cameraY = camY;
+      
+      game.style.transformOrigin = "top left";
+      game.style.transform = `translate(-${cameraX}px, -${cameraY}px) scale(${scale})`;
+      document.getElementById("parallax").style.backgroundPosition = (-cameraX * 0.5) + "px 0";
     }
 
     // --- Main Game Loop ---
@@ -1035,7 +1055,7 @@
       }
       // --- Springy Jump for Player One ---
       if ((keys1["KeyB"] || keys1["Space"]) && playerChar1.jumpReady && playerChar1.torso.position.y >= playAreaHeight - 60) {
-        playerChar1.jumpCounter = 10;  // number of frames for jump impulse
+        playerChar1.jumpCounter = 10;  // frames of jump impulse
         playerChar1.jumpReady = false;
       }
       if (playerChar1.jumpCounter > 0) {
@@ -1227,6 +1247,9 @@
     }
     update();
 
+    // --- Dynamic Camera with Zoom (updateCamera defined above) ---
+    // (The updateCamera function is defined above in the main script block.)
+
     // --- On-Screen Joystick (Player One) ---
     (function() {
       const joystick = document.getElementById("joystick");
@@ -1294,6 +1317,7 @@
     });
 
     // --- Gamepad Support ---
+    let lastGamepadButtonState = {};
     function updateGamepadInput() {
       const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
       const threshold = 0.2;
@@ -1347,7 +1371,7 @@
             playerShoot(playerChar2, keys2, joystickAim2);
           }
           const meleePressed2 = (gp.buttons[2].pressed || gp.buttons[6].pressed);
-          const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
+          const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][2]);
           if (meleePressed2 && !meleeWasPressed2) {
             meleeAttack(playerChar2, keys2, joystickAim2);
           }
