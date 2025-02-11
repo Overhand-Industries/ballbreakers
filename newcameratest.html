@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <!-- The viewport-fit=cover tells supported browsers to use the full display area -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+  <title>Responsive Platformer with Dynamic Camera</title>
+  <style>
+    /* Reset & Full-Screen Setup */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
+    body { background: #666; font-family: sans-serif; overflow: hidden; }
+
+    /* Scoreboard */
+    #scoreboard {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 24px;
+      color: white;
+      z-index: 100;
+    }
+
+    /* Outer game container fills the viewport */
+    #gameboy {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: #a3c1a3;
+      overflow: hidden;
+    }
+    /* The virtual game board – its dimensions are fixed in code */
+    #game {
+      position: absolute;
+      top: 0; left: 0;
+      /* Its width and height are set via script to our virtual level dimensions */
+    }
+    /* Parallax Background Layer */
+    #parallax {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      background: url('IMG_7196.png') repeat-x;
+      background-size: auto 100%;
+      z-index: 0;
+    }
+    
+    /* Basic entity styling */
+    .entity {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      transition: transform 0.5s ease, opacity 0.5s ease;
+    }
+    /* HP Bar Styling */
+    .hp-bar-container {
+      position: absolute;
+      width: 50px;
+      height: 6px;
+      background: rgba(0,0,0,0.5);
+      border: 1px solid #000;
+      border-radius: 3px;
+      pointer-events: none;
+      z-index: 50;
+    }
+    .hp-bar {
+      width: 100%;
+      height: 100%;
+      background: lime;
+      border-radius: 3px;
+    }
+    /* Player parts as circles (“bubbles”) */
+    .player-part {
+      transform-origin: center;
+      background: #fff;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      box-shadow: 0 0 14px rgba(255, 255, 255, 0.2);
+      position: absolute;
+      /* These use masks for visual effects – your assets should exist */
+      mask-image: url('mask.png');
+      mask-size: cover;
+      mask-repeat: no-repeat;
+      -webkit-mask-image: url('mask.png');
+      -webkit-mask-size: cover;
+      -webkit-mask-repeat: no-repeat;
+    }
+    .player-part::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: url('texture.gif') center/cover no-repeat;
+      pointer-events: none;
+      z-index: 10;
+      transform-origin: center;
+      animation: spinReverse 2s linear infinite;
+    }
+    /* Impact flash effect */
+    .impact-flash {
+      animation: impactFlash 0.2s ease;
+    }
+    @keyframes impactFlash {
+      0% { box-shadow: 0 0 10px red; }
+      100% { box-shadow: none; }
+    }
+    /* Other styles (buttons, D-pad, etc.) remain unchanged */
+    /* ... [omitted here for brevity; see your original code for controls and other styling] ... */
+  </style>
+</head>
+<body>
+  <!-- Scoreboard -->
+  <div id="scoreboard">
+    <span id="leftScore">0</span> - <span id="rightScore">0</span>
+  </div>
+  
+  <div id="gameboy">
+    <div id="screen">
+      <div id="parallax"></div>
+      <div id="game"></div>
+    </div>
+    <!-- On-screen controls (if needed) go here -->
+    <div id="controls">
+      <!-- (D-pad, joystick, and AB-buttons, same as before) -->
+    </div>
+  </div>
+
+  <!-- Matter.js Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <script>
+    /* --- Virtual Level & Camera Settings --- */
+    const levelWidth = 3000;
+    const levelHeight = 1500;  // fixed virtual height
+    let cameraX = 0, cameraY = 0, scale = 1;
+
+    // Set the game (virtual board) dimensions
+    const game = document.getElementById("game");
+    game.style.width = levelWidth + "px";
+    game.style.height = levelHeight + "px";
+
+    /* --- Matter.js Setup --- */
+    const { Engine, World, Bodies, Body, Constraint, Events, Composites, Composite } = Matter;
+    let engine = Engine.create();
+    // Use a gravity appropriate for a platformer
+    engine.world.gravity.y = 3.2;
+    const world = engine.world;
+    
+    let tvs = [];
+    let domEntities = [], platforms = [], walls = [], coins = [], bullets = [], enemies = [];
+    let leftScore = 0, rightScore = 0;
+    let keys1 = {}, keys2 = {};
+    let joystickAim1 = { x: 0, y: 0 }, joystickAim2 = { x: 0, y: 0 };
+    let walkCycle1 = 0, walkCycle2 = 0;
+    let lastTime = Date.now();
+
+    /* --- Create Boundary Walls (using real gaming practice) --- */
+    // Create static boundaries that enclose the entire level
+    const wallThickness = 20;
+    const leftBoundary = Bodies.rectangle(wallThickness/2, levelHeight/2, wallThickness, levelHeight, { isStatic: true });
+    const rightBoundary = Bodies.rectangle(levelWidth - wallThickness/2, levelHeight/2, wallThickness, levelHeight, { isStatic: true });
+    const topBoundary = Bodies.rectangle(levelWidth/2, wallThickness/2, levelWidth, wallThickness, { isStatic: true });
+    const bottomBoundary = Bodies.rectangle(levelWidth/2, levelHeight - wallThickness/2, levelWidth, wallThickness, { isStatic: true });
+    World.add(world, [leftBoundary, rightBoundary, topBoundary, bottomBoundary]);
+
+    /* --- Ground DOM Element (optional visual floor) --- */
+    const groundEl = document.createElement("div");
+    groundEl.id = "ground";
+    groundEl.style.position = "absolute";
+    groundEl.style.left = "0px";
+    groundEl.style.top = (levelHeight - wallThickness) + "px";
+    groundEl.style.width = levelWidth + "px";
+    groundEl.style.height = wallThickness + "px";
+    groundEl.style.backgroundColor = "#0d0c29";
+    game.appendChild(groundEl);
+
+    /* --- Helper to create DOM elements for Matter bodies --- */
+    function createDomElement(body, cls, w, h) {
+      const el = document.createElement("div");
+      el.className = "entity " + cls;
+      el.style.width = w + "px";
+      el.style.height = h + "px";
+      game.appendChild(el);
+      body.domElement = el;
+      domEntities.push(body);
+    }
+
+    /* --- Platforms & Walls (unchanged aside from using levelHeight) --- */
+    function createPlatform(x, y, width, height) {
+      const slope = Math.random() * 0.4 + 0.3;
+      const options = { isStatic: true, label: "platform", density: 0.01 };
+      const boulder = Bodies.trapezoid(x + width/2, y + height/2, width, height, slope, options);
+      boulder.width = width;
+      boulder.height = height;
+      boulder.hp = 50;
+      World.add(world, boulder);
+      const el = document.createElement("div");
+      el.className = "boulder";
+      el.style.width = width + "px";
+      el.style.height = height + "px";
+      el.style.left = (x + width/2) + "px";
+      el.style.top = (y + height/2) + "px";
+      el.style.backgroundColor = "#0d0c29";
+      const topClipPercent = slope * 50;
+      el.style.clipPath = `polygon(0% 100%, 100% 100%, ${100 - topClipPercent}% 0%, ${topClipPercent}% 0%)`;
+      game.appendChild(el);
+      boulder.domElement = el;
+      platforms.push(boulder);
+    }
+    function createWall(x, y, width, height) {
+      let body, el;
+      if (y < levelHeight/2) {
+        const vertices = [ { x: -width/2, y: 0 }, { x: width/2, y: 0 }, { x: 0, y: height } ];
+        body = Bodies.fromVertices(x + width/2, height/3, [vertices], { isStatic: true, label: "wall" }, true);
+        body.width = width;
+        body.height = height;
+        body.hp = 100;
+        World.add(world, body);
+        el = document.createElement("div");
+        el.className = "stalactite";
+        el.style.width = width + "px";
+        el.style.height = height + "px";
+        el.style.left = (x + width/2) + "px";
+        el.style.top = (height/3) + "px";
+        el.style.backgroundColor = "#0d0c29";
+        el.style.clipPath = "polygon(50% 100%, 0% 0%, 100% 0%)";
+      } else {
+        const vertices = [ { x: -width/2, y: 0 }, { x: width/2, y: 0 }, { x: 0, y: -height } ];
+        body = Bodies.fromVertices(x + width/2, levelHeight - height/3, [vertices], { isStatic: true, label: "wall" }, true);
+        body.width = width;
+        body.height = height;
+        body.hp = 100;
+        World.add(world, body);
+        el = document.createElement("div");
+        el.className = "stalagmite";
+        el.style.width = width + "px";
+        el.style.height = height + "px";
+        el.style.left = (x + width/2) + "px";
+        el.style.top = (levelHeight - height/3) + "px";
+        el.style.backgroundColor = "#0d0c29";
+        el.style.clipPath = "polygon(50% 0%, 0% 100%, 100% 100%)";
+      }
+      game.appendChild(el);
+      body.domElement = el;
+      walls.push(body);
+      return body;
+    }
+    // Spawn some test platforms/walls:
+    for (let i = 0; i < 2; i++) {
+      const width = Math.floor(Math.random() * 101) + 200;
+      const x = Math.random() * (levelWidth - width);
+      const y = 300 + Math.random() * (levelHeight - 350);
+      createPlatform(x, y, width, 20);
+    }
+    for (let i = 0; i < 1; i++) {
+      const width = 40;
+      const x = Math.random() * (levelWidth - width);
+      createWall(x, 100, width, 200);
+    }
+
+    /* --- Goal Sensors & Walls --- */
+    const goalWidth = 20, goalHeight = 200;
+    const leftGoal = Bodies.rectangle(50, levelHeight/2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "leftGoal" });
+    const rightGoal = Bodies.rectangle(levelWidth - 50, levelHeight/2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "rightGoal" });
+    World.add(world, [leftGoal, rightGoal]);
+    function createGoalDom(goalBody, cls) {
+      const el = document.createElement("div");
+      el.className = "goal " + cls;
+      el.style.width = goalWidth + "px";
+      el.style.height = goalHeight + "px";
+      el.style.left = (goalBody.position.x - goalWidth / 2) + "px";
+      el.style.top = (goalBody.position.y - goalHeight / 2) + "px";
+      game.appendChild(el);
+      goalBody.domElement = el;
+    }
+    createGoalDom(leftGoal, "left");
+    createGoalDom(rightGoal, "right");
+
+    // Create non-passable walls behind each goal
+    const extraWallThickness = 50;
+    const wallCenterY = levelHeight/2;
+    const leftGoalWall = Bodies.rectangle(
+      leftGoal.position.x - (goalWidth/2 + extraWallThickness/2 + 20),
+      wallCenterY,
+      extraWallThickness,
+      levelHeight,
+      { isStatic: true, label: "leftGoalWall" }
+    );
+    const rightGoalWall = Bodies.rectangle(
+      rightGoal.position.x + (goalWidth/2 + extraWallThickness/2 + 20),
+      wallCenterY,
+      extraWallThickness,
+      levelHeight,
+      { isStatic: true, label: "rightGoalWall" }
+    );
+    World.add(world, [leftGoalWall, rightGoalWall]);
+    function createWallDom(wallBody, cls) {
+      const el = document.createElement("div");
+      el.className = "goal-wall " + cls;
+      el.style.width = extraWallThickness + "px";
+      el.style.height = levelHeight + "px";
+      el.style.left = (wallBody.position.x - extraWallThickness/2) + "px";
+      el.style.top = (wallBody.position.y - levelHeight/2) + "px";
+      el.style.background = "#0d0c29";
+      el.style.position = "absolute";
+      el.style.zIndex = "15";
+      game.appendChild(el);
+      wallBody.domElement = el;
+    }
+    createWallDom(leftGoalWall, "left");
+    createWallDom(rightGoalWall, "right");
+
+    /* --- Tentacle Helpers & Character Factory (largely unchanged) --- */
+    function createTentacleComposite(x, y, segments, segmentLength, segmentRadius) {
+      const tentacle = Composites.stack(x, y, segments, 1, 0, 0, function(x, y) {
+        return Bodies.circle(x, y, segmentRadius, { collisionFilter: { group: -1 }, frictionAir: 0.1 });
+      });
+      Composites.chain(tentacle, 0.5, 0, -0.5, 0, { stiffness: 0.8, length: segmentLength });
+      tentacle.bodies.forEach(function(seg) {
+        createDomElement(seg, "tentacleSegment", segmentRadius * 2, segmentRadius * 2);
+      });
+      return tentacle;
+    }
+    function attachTentacleToBody(body, anchorOffset, segments, segmentLength, segmentRadius) {
+      const startX = body.position.x + anchorOffset.x;
+      const startY = body.position.y + anchorOffset.y;
+      const tentacle = createTentacleComposite(startX, startY, segments, segmentLength, segmentRadius);
+      const constraint = Constraint.create({
+        bodyA: body,
+        pointA: anchorOffset,
+        bodyB: tentacle.bodies[0],
+        pointB: { x: 0, y: 0 },
+        stiffness: 0.8,
+        length: 0
+      });
+      Composite.add(world, [tentacle, constraint]);
+      return tentacle;
+    }
+    function createCharacter(x, y) {
+      const char = { hp: 100, alive: true, spawn: { x, y }, heldObject: null, isDying: false };
+      char.facing = "right";
+      const size = 20;
+      const torsoOptions = { friction: 6.0, frictionAir: 0.11, restitution: 0 };
+      const defaultOptions = { friction: 0.5, frictionAir: 0.01, restitution: 0 };
+
+      const hpContainer = document.createElement("div");
+      hpContainer.className = "hp-bar-container";
+      const hpBar = document.createElement("div");
+      hpBar.className = "hp-bar";
+      hpContainer.appendChild(hpBar);
+      game.appendChild(hpContainer);
+      char.hpContainer = hpContainer;
+      char.hpBar = hpBar;
+
+      function addPart(body, cls, w, h) {
+        createDomElement(body, cls, w, h);
+        body.character = char;
+        if (cls.indexOf("head") !== -1) {
+          attachTentacleToBody(body, { x: 0, y: size/2 }, 5, 10, 2);
+          const eyeLeft = document.createElement("div");
+          eyeLeft.className = "eye left";
+          const eyeRight = document.createElement("div");
+          eyeRight.className = "eye right";
+          body.domElement.appendChild(eyeLeft);
+          body.domElement.appendChild(eyeRight);
+        }
+        return body;
+      }
+      const head = Bodies.circle(x, y - 40, size/2, defaultOptions);
+      addPart(head, "player-part head", size, size);
+      const torso = Bodies.circle(x, y - 20, size, torsoOptions);
+      addPart(torso, "player-part torso", size * 2, size * 2);
+      const rightUpperArm = Bodies.circle(x + 30, y - 20, size/2, defaultOptions);
+      addPart(rightUpperArm, "player-part arm", size, size);
+      const rightHand = Bodies.circle(x + 30, y, size/2, defaultOptions);
+      addPart(rightHand, "player-part hand", size, size);
+      const leftUpperArm = Bodies.circle(x - 30, y - 20, size/2, defaultOptions);
+      addPart(leftUpperArm, "player-part arm", size, size);
+      const leftHand = Bodies.circle(x - 30, y, size/2, defaultOptions);
+      addPart(leftHand, "player-part hand", size, size);
+      const rightUpperLeg = Bodies.circle(x + 10, y + 10, size/2, defaultOptions);
+      addPart(rightUpperLeg, "player-part leg", size, size);
+      const rightFoot = Bodies.circle(x + 10, y + 30, size/2, defaultOptions);
+      addPart(rightFoot, "player-part foot", size, size);
+      const leftUpperLeg = Bodies.circle(x - 10, y + 10, size/2, defaultOptions);
+      addPart(leftUpperLeg, "player-part leg", size, size);
+      const leftFoot = Bodies.circle(x - 10, y + 30, size/2, defaultOptions);
+      addPart(leftFoot, "player-part foot", size, size);
+
+      World.add(world, [head, torso, rightUpperArm, rightHand, leftUpperArm, leftHand, rightUpperLeg, rightFoot, leftUpperLeg, leftFoot]);
+      function link(a, b, offA, offB) {
+        const con = Constraint.create({
+          bodyA: a, pointA: offA, bodyB: b, pointB: offB,
+          stiffness: 1, length: 0.1
+        });
+        World.add(world, con);
+      }
+      link(head, torso, { x: 0, y: size/2 }, { x: 0, y: -size });
+      link(torso, rightUpperArm, { x: size, y: 0 }, { x: 0, y: 0 });
+      link(rightUpperArm, rightHand, { x: 0, y: 0 }, { x: 0, y: -20 });
+      link(torso, leftUpperArm, { x: -size, y: 0 }, { x: 0, y: 0 });
+      link(leftUpperArm, leftHand, { x: 0, y: 0 }, { x: 0, y: -20 });
+      link(torso, rightUpperLeg, { x: 10, y: size }, { x: 0, y: -size/2 });
+      link(rightUpperLeg, rightFoot, { x: 0, y: 0 }, { x: 0, y: -20 });
+      link(torso, leftUpperLeg, { x: -10, y: size }, { x: 0, y: -size/2 });
+      link(leftUpperLeg, leftFoot, { x: 0, y: 0 }, { x: 0, y: -20 });
+      char.head = head; char.torso = torso;
+      char.rightUpperArm = rightUpperArm; char.rightHand = rightHand;
+      char.leftUpperArm = leftUpperArm; char.leftHand = leftHand;
+      char.rightUpperLeg = rightUpperLeg; char.rightFoot = rightFoot;
+      char.leftUpperLeg = leftUpperLeg; char.leftFoot = leftFoot;
+      return char;
+    }
+    // Create two players and assign unique IDs
+    let playerChar1 = createCharacter(100, levelHeight/2);
+    let playerChar2 = createCharacter(levelWidth - 100, levelHeight/2);
+    playerChar1.id = "player1";
+    playerChar2.id = "player2";
+    function addPlayerClass(player, className) {
+      let parts = [player.head, player.torso, player.rightUpperArm, player.rightHand,
+                   player.leftUpperArm, player.leftHand, player.rightUpperLeg, player.rightFoot,
+                   player.leftUpperLeg, player.leftFoot];
+      parts.forEach(part => { if (part.domElement) { part.domElement.classList.add(className); } });
+    }
+    addPlayerClass(playerChar1, "player1");
+    addPlayerClass(playerChar2, "player2");
+
+    /* --- Enhanced Enemy, Grab-Throw, Melee, Particles, etc. --- */
+    // (These sections remain largely unchanged from your previous code.)
+    // ...
+    // For brevity, refer to your previous implementation for enemy creation,
+    // coin collection, particle effects, and other interactions.
+    
+    /* --- NEW: Player-on-Player High Velocity Impact Damage --- */
+    let lastPlayerCollisionDamage = {};
+    const collisionDamageCooldown = 1000; // 1 second cooldown
+    Events.on(engine, "collisionStart", function(event) {
+      event.pairs.forEach(pair => {
+        if (pair.bodyA.character && pair.bodyB.character) {
+          let charA = pair.bodyA.character;
+          let charB = pair.bodyB.character;
+          if (charA === charB) return;
+          let idA = charA.id || "unknownA";
+          let idB = charB.id || "unknownB";
+          let pairId = idA < idB ? idA + "-" + idB : idB + "-" + idA;
+          let now = Date.now();
+          if (lastPlayerCollisionDamage[pairId] && now - lastPlayerCollisionDamage[pairId] < collisionDamageCooldown) return;
+          let relSpeed = Math.hypot(pair.bodyA.velocity.x - pair.bodyB.velocity.x,
+                                    pair.bodyA.velocity.y - pair.bodyB.velocity.y);
+          const velocityThreshold = 5;
+          if (relSpeed > velocityThreshold) {
+            const damage = 1;
+            charA.hp -= damage;
+            charB.hp -= damage;
+            lastPlayerCollisionDamage[pairId] = now;
+            if (charA.torso && charA.torso.domElement) {
+              charA.torso.domElement.classList.add("impact-flash");
+              setTimeout(() => { charA.torso.domElement.classList.remove("impact-flash"); }, 200);
+            }
+            if (charB.torso && charB.torso.domElement) {
+              charB.torso.domElement.classList.add("impact-flash");
+              setTimeout(() => { charB.torso.domElement.classList.remove("impact-flash"); }, 200);
+            }
+          }
+        }
+      });
+    });
+
+    /* --- Updated Camera Function (Responsive & Smooth) --- */
+    function updateCamera() {
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+      // Fixed scale so the entire level is visible if the viewport is very large
+      const fixedScale = Math.min(screenWidth / levelWidth, screenHeight / levelHeight);
+      
+      // Compute focus as the average of player torso positions
+      const focusX = (playerChar1.torso.position.x + playerChar2.torso.position.x) / 2;
+      const focusY = (playerChar1.torso.position.y + playerChar2.torso.position.y) / 2;
+      
+      // Compute a bounding box around players with some margin
+      const margin = 200;
+      let minX = Math.min(playerChar1.torso.position.x, playerChar2.torso.position.x) - margin;
+      let maxX = Math.max(playerChar1.torso.position.x, playerChar2.torso.position.x) + margin;
+      let minY = Math.min(playerChar1.torso.position.y, playerChar2.torso.position.y) - margin;
+      let maxY = Math.max(playerChar1.torso.position.y, playerChar2.torso.position.y) + margin;
+      const boxWidth = maxX - minX;
+      const boxHeight = maxY - minY;
+      
+      // Desired scale to fit the players’ bounding box
+      let desiredScale = Math.min(screenWidth / boxWidth, screenHeight / boxHeight);
+      // Clamp desired scale between the fixed scale (show entire level) and 1 (maximum zoom)
+      desiredScale = Math.max(fixedScale, Math.min(desiredScale, 1));
+      
+      // Smoothly update camera position using a lerp
+      const targetCamX = focusX - screenWidth / (2 * desiredScale);
+      const targetCamY = focusY - screenHeight / (2 * desiredScale);
+      cameraX += (targetCamX - cameraX) * 0.1;
+      cameraY += (targetCamY - cameraY) * 0.1;
+      scale += (desiredScale - scale) * 0.1;
+      
+      // Clamp camera to level boundaries so it never shows outside the level
+      const maxCamX = levelWidth - screenWidth / scale;
+      const maxCamY = levelHeight - screenHeight / scale;
+      cameraX = Math.max(0, Math.min(cameraX, maxCamX));
+      cameraY = Math.max(0, Math.min(cameraY, maxCamY));
+      
+      game.style.transformOrigin = "top left";
+      game.style.transform = `translate(-${cameraX}px, -${cameraY}px) scale(${scale})`;
+      document.getElementById("parallax").style.backgroundPosition = (-cameraX * 0.5) + "px 0";
+    }
+
+    /* --- Main Game Loop --- */
+    function update() {
+      // Update gamepad, physics, players, enemies, etc.
+      Engine.update(engine, 1000/60);
+      // (Player movement, updating DOM positions, HP bars, death handling, etc.)
+      // For brevity, much of the existing update code remains as before.
+      // ...
+      domEntities.forEach(body => {
+        if (body.domElement) {
+          body.domElement.style.left = body.position.x + "px";
+          body.domElement.style.top = body.position.y + "px";
+          body.domElement.style.transform = "translate(-50%, -50%) rotate(" + body.angle + "rad)";
+        }
+      });
+      // Update HP bars for players
+      [playerChar1, playerChar2].forEach(player => {
+        if (player.hpContainer) {
+          player.hpContainer.style.left = (player.torso.position.x - 25) + "px";
+          player.hpContainer.style.top = (player.torso.position.y - 60) + "px";
+          const hpPercentage = Math.max(0, player.hp) / 100;
+          player.hpBar.style.width = (hpPercentage * 50) + "px";
+        }
+      });
+      updateCamera();
+      requestAnimationFrame(update);
+    }
+    update();
+
+    /* --- On-Screen Controls & Gamepad Support --- */
+    // (These remain similar to your original code.)
+    // ...
+
+    // Optionally add on-screen joystick and button mappings here.
+  </script>
+</body>
+</html>
