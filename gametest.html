@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -439,7 +440,7 @@
       el.style.top = (y + height/2) + "px";
       el.style.backgroundColor = "#0d0c29";
       const topClipPercent = slope * 50;
-      el.style.clipPath = polygon(0% 100%, 100% 100%, ${100 - topClipPercent}% 0%, ${topClipPercent}% 0%);
+      el.style.clipPath = `polygon(0% 100%, 100% 100%, ${100 - topClipPercent}% 0%, ${topClipPercent}% 0%)`;
       game.appendChild(el);
       boulder.domElement = el;
       platforms.push(boulder);
@@ -946,7 +947,7 @@
         const deltaY = Math.sin(angle) * distance;
         pixel.animate([
           { transform: "translate(0,0)", opacity: 1 },
-          { transform: translate(${deltaX}px, ${deltaY}px), opacity: 0 }
+          { transform: `translate(${deltaX}px, ${deltaY}px)`, opacity: 0 }
         ], {
           duration: 1000,
           easing: "ease-out",
@@ -1275,8 +1276,8 @@
         const deltaX = Math.cos(angle) * distance;
         const deltaY = Math.sin(angle) * distance;
         particle.animate([
-          { transform: translate(0px, 0px), opacity: 1 },
-          { transform: translate(${deltaX}px, ${deltaY}px), opacity: 0 }
+          { transform: `translate(0px, 0px)`, opacity: 1 },
+          { transform: `translate(${deltaX}px, ${deltaY}px)`, opacity: 0 }
         ], {
           duration: 800 + Math.random() * 400,
           easing: "ease-out",
@@ -1328,7 +1329,7 @@
         const deltaY = Math.sin(angle) * distance;
         pixel.animate([
           { transform: "translate(0,0)", opacity: 1 },
-          { transform: translate(${deltaX}px, ${deltaY}px), opacity: 0 }
+          { transform: `translate(${deltaX}px, ${deltaY}px)`, opacity: 0 }
         ], {
           duration: 1000,
           easing: "ease-out",
@@ -1390,7 +1391,7 @@
       
       // Apply the transform to the game container.
       game.style.transformOrigin = "top left";
-      game.style.transform = translate(-${cameraX}px, -${cameraY}px) scale(${scale});
+      game.style.transform = `translate(-${cameraX}px, -${cameraY}px) scale(${scale})`;
       document.getElementById("parallax").style.backgroundPosition = (-cameraX * 0.5) + "px 0";
     }
 
@@ -1809,7 +1810,7 @@
           moveX = (dx / distance) * maxDistance;
           moveY = (dy / distance) * maxDistance;
         }
-        joystick.style.transform = translate(${moveX}px, ${moveY}px);
+        joystick.style.transform = `translate(${moveX}px, ${moveY}px)`;
         const mag = Math.hypot(moveX, moveY);
         if (mag > 0) { joystickAim1.x = moveX / mag; joystickAim1.y = moveY / mag; }
         else { joystickAim1.x = 0; joystickAim1.y = 0; }
@@ -1852,4 +1853,4 @@
     });
   </script>
 </body>
-</html> 
+</html>
