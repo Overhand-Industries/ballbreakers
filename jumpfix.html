@@ -419,11 +419,76 @@
       domEntities.push(body);
     }
 
+    /* --- Damage and Break Functions --- */
+    function particleBurst(x, y, color) {
+      // Create 10 particles that spread out and fade away
+      for (let i = 0; i < 10; i++) {
+        let particle = document.createElement("div");
+        particle.style.position = "absolute";
+        particle.style.left = x + "px";
+        particle.style.top = y + "px";
+        particle.style.width = "4px";
+        particle.style.height = "4px";
+        particle.style.backgroundColor = color;
+        particle.style.borderRadius = "50%";
+        particle.style.pointerEvents = "none";
+        game.appendChild(particle);
+        particle.animate([
+          { transform: "translate(0, 0)", opacity: 1 },
+          { transform: "translate(" + (Math.random() * 50 - 25) + "px, " + (Math.random() * 50 - 25) + "px)", opacity: 0 }
+        ], { duration: 800, easing: "ease-out", fill: "forwards" });
+        setTimeout(() => {
+          if (particle.parentNode) particle.parentNode.removeChild(particle);
+        }, 800);
+      }
+    }
+
+    function breakWall(wall) {
+      World.remove(world, wall);
+      if (wall.domElement && wall.domElement.parentNode) {
+        wall.domElement.parentNode.removeChild(wall.domElement);
+      }
+      let idx = walls.indexOf(wall);
+      if (idx !== -1) walls.splice(idx, 1);
+    }
+
+    function breakBoulder(boulder) {
+      World.remove(world, boulder);
+      if (boulder.domElement && boulder.domElement.parentNode) {
+        boulder.domElement.parentNode.removeChild(boulder.domElement);
+      }
+      let idx = platforms.indexOf(boulder);
+      if (idx !== -1) platforms.splice(idx, 1);
+    }
+
+    function damageDestructible(obj, damage) {
+      if (typeof obj.hp !== "number") return;
+      obj.hp -= damage;
+      particleBurst(obj.position.x, obj.position.y, "orange");
+      if (obj.hp <= 0) {
+        particleBurst(obj.position.x, obj.position.y, "red");
+        if (obj.label === "wall") {
+          breakWall(obj);
+        } else if (obj.label === "platform") {
+          breakBoulder(obj);
+        } else {
+          World.remove(world, obj);
+          if (obj.domElement && obj.domElement.parentNode) {
+            obj.domElement.parentNode.removeChild(obj.domElement);
+          }
+          if (obj.label === "enemy") {
+            let idx = enemies.findIndex(e => e.body === obj);
+            if (idx !== -1) enemies.splice(idx, 1);
+          }
+        }
+      }
+    }
+
     /* --- Platforms / Boulders --- */
     function createPlatform(x, y, width, height) {
       const slope = Math.random() * 0.4 + 0.3;
       const options = { isStatic: true, label: "platform", density: 0.01 };
-      const boulder = Bodies.trapezoid(x + width / 2, y + height / 2, width, height, slope, options);
+      const boulder = Bodies.trapezoid(x + width/2, y + height/2, width, height, slope, options);
       boulder.width = width;
       boulder.height = height;
       boulder.hp = 50;
@@ -432,8 +497,8 @@
       el.className = "boulder";
       el.style.width = width + "px";
       el.style.height = height + "px";
-      el.style.left = (x + width / 2) + "px";
-      el.style.top = (y + height / 2) + "px";
+      el.style.left = (x + width/2) + "px";
+      el.style.top = (y + height/2) + "px";
       el.style.backgroundColor = "#0d0c29";
       const topClipPercent = slope * 50;
       el.style.clipPath = `polygon(0% 100%, 100% 100%, ${100 - topClipPercent}% 0%, ${topClipPercent}% 0%)`;
@@ -445,9 +510,9 @@
     /* --- Walls (Stalactites/Stalagmites) --- */
     function createWall(x, y, width, height) {
       let body, el;
-      if (y < playAreaHeight / 2) {
-        const vertices = [{ x: -width / 2, y: 0 }, { x: width / 2, y: 0 }, { x: 0, y: height }];
-        body = Bodies.fromVertices(x + width / 2, height / 3, [vertices], { isStatic: true, label: "wall" }, true);
+      if (y < playAreaHeight/2) {
+        const vertices = [{ x: -width/2, y: 0 }, { x: width/2, y: 0 }, { x: 0, y: height }];
+        body = Bodies.fromVertices(x + width/2, height/3, [vertices], { isStatic: true, label: "wall" }, true);
         body.width = width;
         body.height = height;
         body.hp = 100;
@@ -456,13 +521,13 @@
         el.className = "stalactite";
         el.style.width = width + "px";
         el.style.height = height + "px";
-        el.style.left = (x + width / 2) + "px";
-        el.style.top = (height / 3) + "px";
+        el.style.left = (x + width/2) + "px";
+        el.style.top = (height/3) + "px";
         el.style.backgroundColor = "#0d0c29";
         el.style.clipPath = "polygon(50% 100%, 0% 0%, 100% 0%)";
       } else {
-        const vertices = [{ x: -width / 2, y: 0 }, { x: width / 2, y: 0 }, { x: 0, y: -height }];
-        body = Bodies.fromVertices(x + width / 2, playAreaHeight - height / 3, [vertices], { isStatic: true, label: "wall" }, true);
+        const vertices = [{ x: -width/2, y: 0 }, { x: width/2, y: 0 }, { x: 0, y: -height }];
+        body = Bodies.fromVertices(x + width/2, playAreaHeight - height/3, [vertices], { isStatic: true, label: "wall" }, true);
         body.width = width;
         body.height = height;
         body.hp = 100;
@@ -471,8 +536,8 @@
         el.className = "stalagmite";
         el.style.width = width + "px";
         el.style.height = height + "px";
-        el.style.left = (x + width / 2) + "px";
-        el.style.top = (playAreaHeight - height / 3) + "px";
+        el.style.left = (x + width/2) + "px";
+        el.style.top = (playAreaHeight - height/3) + "px";
         el.style.backgroundColor = "#0d0c29";
         el.style.clipPath = "polygon(50% 0%, 0% 100%, 100% 100%)";
       }
@@ -506,8 +571,8 @@
 
     // Create Goal Sensors
     const goalWidth = 20, goalHeight = 200;
-    const leftGoal = Bodies.rectangle(50, playAreaHeight / 2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "leftGoal" });
-    const rightGoal = Bodies.rectangle(levelWidth - 50, playAreaHeight / 2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "rightGoal" });
+    const leftGoal = Bodies.rectangle(50, playAreaHeight/2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "leftGoal" });
+    const rightGoal = Bodies.rectangle(levelWidth - 50, playAreaHeight/2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "rightGoal" });
     World.add(world, [leftGoal, rightGoal]);
     function createGoalDom(goalBody, cls) {
       const el = document.createElement("div");
@@ -521,6 +586,7 @@
     }
     createGoalDom(leftGoal, "left");
     createGoalDom(rightGoal, "right");
+
     // Create non-passable walls behind each goal
     const wallThickness = 50;
     const fullHeight = playAreaHeight + 2;
@@ -608,7 +674,7 @@
         createDomElement(body, cls, w, h);
         body.character = char;
         if (cls.indexOf("head") !== -1) {
-          attachTentacleToBody(body, { x: 0, y: size / 2 }, 5, 10, 2);
+          attachTentacleToBody(body, { x: 0, y: size/2 }, 5, 10, 2);
           const eyeLeft = document.createElement("div");
           eyeLeft.className = "eye left";
           const eyeRight = document.createElement("div");
@@ -649,14 +715,14 @@
         });
         World.add(world, con);
       }
-      link(head, torso, { x: 0, y: size / 2 }, { x: 0, y: -size });
+      link(head, torso, { x: 0, y: size/2 }, { x: 0, y: -size });
       link(torso, rightUpperArm, { x: size, y: 0 }, { x: 0, y: 0 });
       link(rightUpperArm, rightHand, { x: 0, y: 0 }, { x: 0, y: -20 });
       link(torso, leftUpperArm, { x: -size, y: 0 }, { x: 0, y: 0 });
       link(leftUpperArm, leftHand, { x: 0, y: 0 }, { x: 0, y: -20 });
-      link(torso, rightUpperLeg, { x: 10, y: size }, { x: 0, y: -size / 2 });
+      link(torso, rightUpperLeg, { x: 10, y: size }, { x: 0, y: -size/2 });
       link(rightUpperLeg, rightFoot, { x: 0, y: 0 }, { x: 0, y: -20 });
-      link(torso, leftUpperLeg, { x: -10, y: size }, { x: 0, y: -size / 2 });
+      link(torso, leftUpperLeg, { x: -10, y: size }, { x: 0, y: -size/2 });
       link(leftUpperLeg, leftFoot, { x: 0, y: 0 }, { x: 0, y: -20 });
 
       char.head = head;
@@ -968,9 +1034,7 @@
 
     // --- Auto Respawn Helper ---
     function respawnPlayer(player) {
-      const parts = [player.head, player.torso, player.rightUpperArm, player.rightHand,
-                     player.leftUpperArm, player.leftHand, player.rightUpperLeg, player.rightFoot,
-                     player.leftUpperLeg, player.leftFoot];
+      const parts = [player.head, player.torso, player.rightUpperArm, player.rightHand, player.leftUpperArm, player.leftHand, player.rightUpperLeg, player.rightFoot, player.leftUpperLeg, player.leftFoot];
       parts.forEach(part => {
         World.remove(world, part);
         if (part.domElement && part.domElement.parentNode) {
@@ -1247,8 +1311,118 @@
     }
     update();
 
-    // --- Dynamic Camera with Zoom (updateCamera defined above) ---
-    // (The updateCamera function is defined above in the main script block.)
+    // --- Dynamic Camera with Zoom ---
+    let cameraX = 0, cameraY = 0;
+    function updateCamera() {
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+      
+      let points = [
+        playerChar1.torso.position,
+        playerChar2.torso.position
+      ];
+      if (enemies.length > 0) {
+        points.push(enemies[0].body.position);
+      }
+      
+      let sumX = 0, sumY = 0;
+      points.forEach(p => {
+        sumX += p.x;
+        sumY += p.y;
+      });
+      const centerX = sumX / points.length;
+      const centerY = sumY / points.length;
+      
+      const margin = 100;
+      let minX = Math.min(...points.map(p => p.x)) - margin;
+      let maxX = Math.max(...points.map(p => p.x)) + margin;
+      let minY = Math.min(...points.map(p => p.y)) - margin;
+      let maxY = Math.max(...points.map(p => p.y)) + margin;
+      
+      const boxWidth = maxX - minX;
+      const boxHeight = maxY - minY;
+      
+      const scaleX = screenWidth / boxWidth;
+      const scaleY = screenHeight / boxHeight;
+      let scale = Math.min(scaleX, scaleY, 1);
+      
+      let camX = centerX - screenWidth / (2 * scale);
+      let camY = centerY - screenHeight / (2 * scale);
+      
+      camX = Math.max(0, Math.min(camX, levelWidth - screenWidth / scale));
+      camY = Math.max(0, Math.min(camY, gameHeight - screenHeight / scale));
+      
+      cameraX = camX;
+      cameraY = camY;
+      
+      game.style.transformOrigin = "top left";
+      game.style.transform = `translate(-${cameraX}px, -${cameraY}px) scale(${scale})`;
+      document.getElementById("parallax").style.backgroundPosition = (-cameraX * 0.5) + "px 0";
+    }
+
+    // --- Gamepad Support ---
+    let lastGamepadButtonState = {};
+    function updateGamepadInput() {
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const threshold = 0.2;
+      for (let i = 0; i < gamepads.length; i++) {
+        const gp = gamepads[i];
+        if (!gp) continue;
+        if (gp.index === 0) {
+          if (gp.axes[0] < -threshold) {
+            keys1["ArrowLeft"] = true; keys1["ArrowRight"] = false;
+          } else if (gp.axes[0] > threshold) {
+            keys1["ArrowRight"] = true; keys1["ArrowLeft"] = false;
+          } else { keys1["ArrowLeft"] = false; keys1["ArrowRight"] = false; }
+          keys1["ArrowUp"] = false;
+          keys1["Space"] = (gp.buttons[0] && gp.buttons[0].pressed) || (gp.buttons[11] && gp.buttons[11].pressed);
+          let rx = gp.axes[2], ry = gp.axes[3];
+          let rmag = Math.hypot(rx, ry);
+          if (rmag > threshold) { joystickAim1.x = rx / rmag; joystickAim1.y = ry / rmag; }
+          else { joystickAim1.x = 0; joystickAim1.y = 0; }
+          if (!lastGamepadButtonState[gp.index]) {
+            lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
+          }
+          const shootPressed = (gp.buttons[1].pressed || gp.buttons[7].pressed);
+          const shootWasPressed = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
+          if (shootPressed && !shootWasPressed) {
+            playerShoot(playerChar1, keys1, joystickAim1);
+          }
+          const meleePressed = (gp.buttons[2].pressed || gp.buttons[6].pressed);
+          const meleeWasPressed = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
+          if (meleePressed && !meleeWasPressed) {
+            meleeAttack(playerChar1, keys1, joystickAim1);
+          }
+          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
+        } else if (gp.index === 1) {
+          if (gp.axes[0] < -threshold) {
+            keys2["ArrowLeft"] = true; keys2["ArrowRight"] = false;
+          } else if (gp.axes[0] > threshold) {
+            keys2["ArrowRight"] = true; keys2["ArrowLeft"] = false;
+          } else { keys2["ArrowLeft"] = false; keys2["ArrowRight"] = false; }
+          keys2["ArrowUp"] = false;
+          keys2["Space"] = (gp.buttons[0].pressed || gp.buttons[11].pressed);
+          let rx = gp.axes[2], ry = gp.axes[3];
+          let rmag = Math.hypot(rx, ry);
+          if (rmag > threshold) { joystickAim2.x = rx / rmag; joystickAim2.y = ry / rmag; }
+          else { joystickAim2.x = 0; joystickAim2.y = 0; }
+          if (!lastGamepadButtonState[gp.index]) {
+            lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
+          }
+          const shootPressed2 = (gp.buttons[1].pressed || gp.buttons[7].pressed);
+          const shootWasPressed2 = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
+          if (shootPressed2 && !shootWasPressed2) {
+            playerShoot(playerChar2, keys2, joystickAim2);
+          }
+          const meleePressed2 = (gp.buttons[2].pressed || gp.buttons[6].pressed);
+          const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
+          if (meleePressed2 && !meleeWasPressed2) {
+            meleeAttack(playerChar2, keys2, joystickAim2);
+          }
+          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
+        }
+      }
+    }
 
     // --- On-Screen Joystick (Player One) ---
     (function() {
@@ -1371,7 +1545,7 @@
             playerShoot(playerChar2, keys2, joystickAim2);
           }
           const meleePressed2 = (gp.buttons[2].pressed || gp.buttons[6].pressed);
-          const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][2]);
+          const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
           if (meleePressed2 && !meleeWasPressed2) {
             meleeAttack(playerChar2, keys2, joystickAim2);
           }
