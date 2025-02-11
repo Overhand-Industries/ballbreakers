@@ -1288,7 +1288,7 @@
         // Calculate vertical center of the ground:
         const groundCenter = (playAreaHeight - 20) + (groundExtraHeight / 2); // equals playAreaHeight + 30
         // Trigger "OUT!" if enemy penetrates below the ground's center and is moving fast.
-        const groundPenetration = pos.y > groundCenter && enemy.body.speed > 10;
+        const groundPenetration = pos.y > groundCenter && enemy.body.speed > 3;
         if (outHorizontally || outBelowSafety || groundPenetration) {
           triggerOutEffect();
           removeEnemy(enemy.body);
