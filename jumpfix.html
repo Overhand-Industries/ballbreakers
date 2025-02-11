@@ -1080,6 +1080,53 @@
       goalText.classList.add("goalTextAnimation");
       setTimeout(() => { if (goalText.parentNode) { goalText.parentNode.removeChild(goalText); } }, 1000);
     }
+    function checkEnemyOutOfBounds() {
+  // Loop through all enemies and remove any that are out of bounds.
+  enemies.slice().forEach(enemy => {
+    const pos = enemy.body.position;
+    const outHorizontally = pos.x < 0 || pos.x > levelWidth;
+    const outBelowSafety = pos.y > safetyFloorY;
+    // Calculate the ground center (adjust based on your ground parameters)
+    const groundCenter = (playAreaHeight - 20) + (groundExtraHeight / 2);
+    const groundPenetration = pos.y > groundCenter && enemy.body.speed > 3;
+    if (outHorizontally || outBelowSafety || groundPenetration) {
+      triggerOutEffect();
+      removeEnemy(enemy.body);
+      setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
+    }
+  });
+}
+
+function triggerOutEffect() {
+  // Display a brief "OUT!" effect on screen.
+  const outText = document.createElement("div");
+  outText.id = "outText";
+  outText.innerText = "OUT!";
+  outText.style.position = "absolute";
+  outText.style.top = "50%";
+  outText.style.left = "50%";
+  outText.style.transform = "translate(-50%, -50%)";
+  outText.style.fontSize = "72px";
+  outText.style.fontWeight = "bold";
+  outText.style.fontFamily = '"Impact", "Arial Black", sans-serif';
+  outText.style.color = "red";
+  outText.style.zIndex = "60";
+  outText.style.pointerEvents = "none";
+  game.appendChild(outText);
+  
+  const screenEl = document.getElementById("screen");
+  screenEl.classList.remove("shake");
+  void screenEl.offsetWidth;
+  screenEl.classList.add("shake");
+  
+  outText.classList.add("goalTextAnimation");
+  setTimeout(() => {
+    if (outText.parentNode) {
+      outText.parentNode.removeChild(outText);
+    }
+  }, 1000);
+}
+
     function damageDestructible(obj, damage) {
       if (typeof obj.hp !== "number") return;
       obj.hp -= damage;
