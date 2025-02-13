@@ -454,24 +454,33 @@
     }
 
     /* --- Walls (Stalactites/Stalagmites) --- */
-    function createWall(x, y, width, height) {
-      let body, el;
-      if (y < playAreaHeight/2) {
-        const vertices = [ { x: -width/2, y: 0 }, { x: width/2, y: 0 }, { x: 0, y: height } ];
-        body = Bodies.fromVertices(x + width/2, height/3, [vertices], { isStatic: true, label: "wall" }, true);
-        body.width = width;
-        body.height = height;
-        body.hp = 100;
-        World.add(world, body);
-        el = document.createElement("div");
-        el.className = "stalactite";
-        el.style.width = width + "px";
-        el.style.height = height + "px";
-        el.style.left = (x + width/2) + "px";
-        el.style.top = (height/3) + "px";
-        el.style.backgroundColor = "#0d0c29";
-        el.style.clipPath = "polygon(50% 100%, 0% 0%, 100% 0%)";
-      } else {
+ function createWall(x, y, width, height) {
+  let body, el;
+  if (y < playAreaHeight/2) {
+    // Define vertices for a triangle that points downward.
+    const vertices = [
+      { x: -width/2, y: 0 },
+      { x: width/2, y: 0 },
+      { x: 0, y: height }
+    ];
+    // Set the physics body’s center so that the top is at y = 0.
+    body = Bodies.fromVertices(x + width/2, height/2, [vertices], { isStatic: true, label: "wall" }, true);
+    body.width = width;
+    body.height = height;
+    body.hp = 100;
+    World.add(world, body);
+
+    el = document.createElement("div");
+    el.className = "stalactite";
+    el.style.width = width + "px";
+    el.style.height = height + "px";
+    // Position horizontally centered and align top to 0.
+    el.style.left = (x + width/2) + "px";
+    el.style.top = "0px"; 
+    el.style.backgroundColor = "#0d0c29";
+    // Use a clip path that makes the triangle’s tip at the top.
+    el.style.clipPath = "polygon(50% 0%, 0% 100%, 100% 100%)";
+  } else {
         const vertices = [ { x: -width/2, y: 0 }, { x: width/2, y: 0 }, { x: 0, y: -height } ];
         body = Bodies.fromVertices(x + width/2, playAreaHeight - height/3, [vertices], { isStatic: true, label: "wall" }, true);
         body.width = width;
