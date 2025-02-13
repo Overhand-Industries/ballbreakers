@@ -415,7 +415,7 @@
     const groundEl = document.createElement("div");
     groundEl.id = "ground";
     groundEl.style.top = (playAreaHeight - 20) + "px";
-    groundEl.style.width = levelWidth + "px";
+    groundEl.style.width = (levelWidth + 40) + "px";
     groundEl.style.height = groundExtraHeight + "px";
     game.appendChild(groundEl);
 
@@ -529,7 +529,7 @@ function createWall(x, y, width, height) {
     }
 
     // Static boundaries & safety floor
-    const groundBody = Bodies.rectangle(levelWidth / 2, playAreaHeight, levelWidth, 40, { isStatic: true });
+    const groundBody = Bodies.rectangle(levelWidth / 2, playAreaHeight, levelWidth + 40, 40, { isStatic: true });
     const leftBoundary = Bodies.rectangle(0, playAreaHeight / 2, 40, playAreaHeight, { isStatic: true });
     const rightBoundary = Bodies.rectangle(levelWidth, playAreaHeight / 2, 40, playAreaHeight, { isStatic: true });
     World.add(world, [groundBody, leftBoundary, rightBoundary]);
