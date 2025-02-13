@@ -454,16 +454,17 @@
     }
 
     /* --- Walls (Stalactites/Stalagmites) --- */
- function createWall(x, y, width, height) {
+function createWall(x, y, width, height) {
   let body, el;
   if (y < playAreaHeight / 2) {
-    // Stalactite: triangle with tip at top.
+    // Stalactite: triangle with tip at bottom.
+    // Define vertices so the base is at the top and the tip is at the bottom.
     const vertices = [
-      { x: -width/2, y: 0 },
-      { x: width/2,  y: 0 },
-      { x: 0,        y: height }
+      { x: -width/2, y: 0 },   // left corner (base)
+      { x: width/2,  y: 0 },   // right corner (base)
+      { x: 0,        y: height } // tip at bottom
     ];
-    // Centroid for this triangle is at (0, height/3)
+    // The centroid of this triangle is at (0, height/3).
     body = Bodies.fromVertices(x + width/2, height / 3, [vertices], { isStatic: true, label: "wall" }, true);
     body.width = width;
     body.height = height;
@@ -474,22 +475,23 @@
     el.className = "stalactite";
     el.style.width = width + "px";
     el.style.height = height + "px";
-    // Center horizontally and align the top edge to 0.
+    // Center horizontally; align the top edge of the DOM element with the ceiling.
     el.style.left = (x + width/2) + "px";
     el.style.top = "0px"; 
     el.style.backgroundColor = "#0d0c29";
-    // Clip-path for a triangle with tip at the top.
-    el.style.clipPath = "polygon(50% 0%, 0% 100%, 100% 100%)";
+    // Use a clip-path that flips the triangle so its tip is at the bottom.
+    el.style.clipPath = "polygon(50% 100%, 0% 0%, 100% 0%)";
   } else {
-    // Stalagmite: triangle with tip at bottom.
+    // Stalagmite: triangle with tip at top.
+    // Define vertices so the base is at the bottom and the tip is at the top.
     const vertices = [
-      { x: -width/2, y: height },
-      { x: width/2,  y: height },
-      { x: 0,        y: 0 }
+      { x: -width/2, y: height }, // left corner (base)
+      { x: width/2,  y: height }, // right corner (base)
+      { x: 0,        y: 0 }        // tip at top
     ];
-    // Centroid here is at (0, 2*height/3)
-    // Position so that the DOM element’s bottom aligns with playAreaHeight.
-    body = Bodies.fromVertices(x + width/2, playAreaHeight - (height / 3), [vertices], { isStatic: true, label: "wall" }, true);
+    // The centroid of this triangle is at (0, 2*height/3).
+    // Position the body so that its bottom aligns with playAreaHeight.
+    body = Bodies.fromVertices(x + width/2, playAreaHeight - (2 * height) / 3, [vertices], { isStatic: true, label: "wall" }, true);
     body.width = width;
     body.height = height;
     body.hp = 100;
@@ -503,14 +505,15 @@
     // Align the bottom edge with playAreaHeight.
     el.style.top = (playAreaHeight - height) + "px";
     el.style.backgroundColor = "#0d0c29";
-    // Inverted clip-path: tip at the bottom.
-    el.style.clipPath = "polygon(50% 100%, 0% 0%, 100% 0%)";
+    // Use a clip-path that flips the triangle so its tip is at the top.
+    el.style.clipPath = "polygon(50% 0%, 0% 100%, 100% 100%)";
   }
   game.appendChild(el);
   body.domElement = el;
   walls.push(body);
   return body;
 }
+
 
     // Spawn some platforms and walls for testing
     for (let i = 0; i < 2; i++) {
