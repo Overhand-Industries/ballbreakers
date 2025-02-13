@@ -340,6 +340,15 @@
       -webkit-mask-repeat: no-repeat;
       -webkit-mask-position: center;
     }
+    .enemy-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: url('overlay3.gif') center/cover no-repeat;
+  pointer-events: none;
+}
   </style>
 </head>
 <body>
@@ -710,7 +719,12 @@
       });
       createDomElement(enemy.body, "enemy", 40, 40);
       World.add(world, enemy.body);
-
+      
+  // Create and append overlay element
+  const overlay = document.createElement("div");
+  overlay.classList.add("enemy-overlay");
+  enemy.body.domElement.appendChild(overlay);
+      
       enemy.update = function() {
         const dx1 = playerChar1.torso.position.x - enemy.body.position.x;
         const dy1 = playerChar1.torso.position.y - enemy.body.position.y;
