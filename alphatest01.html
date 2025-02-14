@@ -350,33 +350,44 @@
   background: url('overlay9.gif') center/cover no-repeat;
   pointer-events: none;
 }
-    .booster-pixel {
+ .booster-pixel {
   position: absolute;
   width: 4px;
   height: 4px;
+  /* A radial gradient gives a pixelated flame look */
+  background: radial-gradient(circle at center, #FFD700 0%, #FF8C00 50%, transparent 70%);
   image-rendering: pixelated;
   pointer-events: none;
   z-index: 20;
-  animation: boosterAnimation 500ms ease-out forwards;
+  animation: rocketBoost 600ms cubic-bezier(0.2, 1, 0.3, 1) forwards;
 }
 
-/* Cycle through a few flame colors for a realistic look */
-.booster-pixel:nth-child(3n) { background: #FF4500; }
-.booster-pixel:nth-child(3n+1) { background: #FFA500; }
-.booster-pixel:nth-child(3n+2) { background: #FFD700; }
-
-@keyframes boosterAnimation {
+@keyframes rocketBoost {
   0% {
-    transform: translate(0, 0) scale(1);
+    transform: translate(0, 0) scale(1) rotate(0deg);
     opacity: 1;
+    filter: drop-shadow(0 0 2px #FF8C00);
+  }
+  20% {
+    transform: translate(calc(var(--dx, 0) * 0.3px), calc(var(--dy, 0) * 0.3px))
+               scale(1.1) rotate(calc(var(--rotation, 0) * 1deg));
+    opacity: 0.9;
+    filter: drop-shadow(0 0 2px #FFA500);
+  }
+  50% {
+    transform: translate(calc(var(--dx, 0) * 0.7px), calc(var(--dy, 0) * 0.7px))
+               scale(0.8) rotate(calc(var(--rotation, 0) * 1deg));
+    opacity: 0.6;
+    filter: drop-shadow(0 0 1px #FF4500);
   }
   100% {
-    /* Use the randomized values to determine movement:
-       Pixels move by the calculated dx and -dy (upwards) and shrink in size. */
-    transform: translate(calc(var(--dx) * 1px), calc(-var(--dy) * 1px)) scale(0.5);
+    transform: translate(calc(var(--dx, 0) * 1px), calc(var(--dy, 0) * 1px))
+               scale(0.5) rotate(calc(var(--rotation, 0) * 1deg));
     opacity: 0;
+    filter: drop-shadow(0 0 1px #FF4500);
   }
 }
+
 
   </style>
 </head>
