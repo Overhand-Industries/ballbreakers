@@ -1164,7 +1164,7 @@ function createWall(x, y, width, height) {
           el.style.top = cy + "px";
           if (isStalagmite) {
             el.style.borderRadius = "0";
-            el.style.clipPath = "polygon(0% 20%, 30% 0%, 70% 10%, 100% 20%, 80% 100%, 50% 80%, 20% 100%)";
+            el.style.clipPath = "polygon(50% 100%, 0% 0%, 100% 0%)";
           }
           game.appendChild(el);
           chunk.domElement = el;
