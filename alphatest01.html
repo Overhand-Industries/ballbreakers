@@ -350,15 +350,34 @@
   background: url('overlay9.gif') center/cover no-repeat;
   pointer-events: none;
 }
-.rocket-flame {
+    .booster-pixel {
   position: absolute;
-  width: 20px;
-  height: 20px;
-  background: radial-gradient(circle, #FFA500 0%, #FF4500 100%);
-  border-radius: 50%;
+  width: 4px;
+  height: 4px;
+  image-rendering: pixelated;
   pointer-events: none;
-  z-index: 15;
+  z-index: 20;
+  animation: boosterAnimation 500ms ease-out forwards;
 }
+
+/* Cycle through a few flame colors for a realistic look */
+.booster-pixel:nth-child(3n) { background: #FF4500; }
+.booster-pixel:nth-child(3n+1) { background: #FFA500; }
+.booster-pixel:nth-child(3n+2) { background: #FFD700; }
+
+@keyframes boosterAnimation {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    /* Use the randomized values to determine movement:
+       Pixels move by the calculated dx and -dy (upwards) and shrink in size. */
+    transform: translate(calc(var(--dx) * 1px), calc(-var(--dy) * 1px)) scale(0.5);
+    opacity: 0;
+  }
+}
+
   </style>
 </head>
 <body>
@@ -486,27 +505,6 @@ window.addEventListener('load', showInstructionsOnce);
       body.domElement = el;
       domEntities.push(body);
     }
-function createRocketBoosterEffect(pos) {
-  const flame = document.createElement("div");
-  flame.className = "rocket-flame";
-  flame.style.left = pos.x + "px";
-  flame.style.top = pos.y + "px";
-  game.appendChild(flame);
-
-  // Animate the flame using the Web Animations API
-  flame.animate([
-    { transform: "scale(1)", opacity: 1 },
-    { transform: "scale(1.5)", opacity: 0 }
-  ], {
-    duration: 500,
-    easing: "ease-out",
-    fill: "forwards"
-  });
-
-  setTimeout(() => {
-    flame.parentNode && flame.parentNode.removeChild(flame);
-  }, 500);
-}
 
     /* --- Platforms / Boulders --- */
     function createPlatform(x, y, width, height) {
@@ -1667,12 +1665,8 @@ function createWall(x, y, width, height) {
           x: directionalInput.x * jumpForce,
           y: directionalInput.y * jumpForce
         });
-          // Trigger the rocket booster effect at the player's feet (adjust the offset as needed)
-  createRocketBoosterEffect({
-    x: playerChar1.torso.position.x,
-    y: playerChar1.torso.position.y + 30
-  });
-
+          // Trigger the rocket booster effect for Player One
+  createRocketBoosterEffect(playerChar1);
       }
 
       // ----- PLAYER TWO MOVEMENT -----
@@ -1713,6 +1707,8 @@ function createWall(x, y, width, height) {
           x: directionalInput.x * jumpForce,
           y: directionalInput.y * jumpForce
         });
+          // Trigger the rocket booster effect for Player Two
+  createRocketBoosterEffect(playerChar2);
       }
 
       // ----- Air Steering for Player One -----
@@ -1752,6 +1748,36 @@ function createWall(x, y, width, height) {
           });
         }
       }
+function createRocketBoosterEffect(player) {
+  // Calculate an offset so the effect appears behind the player's torso.
+  // If facing "right", the effect originates to the left (negative offset); if "left", to the right.
+  const offsetX = player.facing === "right" ? -30 : 30;
+  const origin = {
+    x: player.torso.position.x + offsetX,
+    y: player.torso.position.y + 10  // Adjust vertical offset as needed.
+  };
+
+  const numPixels = 12;  // Number of pixel particles per jump
+  for (let i = 0; i < numPixels; i++) {
+    const pixel = document.createElement("div");
+    pixel.className = "booster-pixel";
+    // Start each pixel at the calculated origin.
+    pixel.style.left = origin.x + "px";
+    pixel.style.top = origin.y + "px";
+    // Randomize its displacement.
+    const dx = Math.random() * 20 - 10; // horizontal: -10 to 10 pixels
+    const dy = Math.random() * 20;      // vertical: 0 to 20 pixels upward
+    pixel.style.setProperty("--dx", dx);
+    pixel.style.setProperty("--dy", dy);
+    // Optionally randomize a slight rotation.
+    pixel.style.transform = `rotate(${Math.random() * 360}deg)`;
+    game.appendChild(pixel);
+    // Remove the pixel after its animation completes.
+    setTimeout(() => {
+      pixel.parentNode && pixel.parentNode.removeChild(pixel);
+    }, 500);
+  }
+}
 
       // Update DOM positions for physics bodies
       domEntities.forEach(body => {
