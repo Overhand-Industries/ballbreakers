@@ -382,6 +382,54 @@
   <!-- Matter.js Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <script>
+function showInstructionsOnce() {
+  // Check if we've already shown the instructions
+  if (localStorage.getItem('instructionsShown')) {
+    return;
+  }
+  // Create the pop-up container
+  const popup = document.createElement('div');
+  popup.id = 'instructions-popup';
+  popup.style.position = 'fixed';
+  popup.style.top = '0';
+  popup.style.left = '0';
+  popup.style.width = '100vw';
+  popup.style.height = '100vh';
+  popup.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+  popup.style.color = '#fff';
+  popup.style.display = 'flex';
+  popup.style.flexDirection = 'column';
+  popup.style.justifyContent = 'center';
+  popup.style.alignItems = 'center';
+  popup.style.zIndex = '1000';
+  popup.style.textAlign = 'center';
+  popup.style.padding = '20px';
+  
+  // Fill in instructions
+  popup.innerHTML = `
+    <h1>How to Play</h1>
+    <p><strong>Movement:</strong> Use the left stick or D-pad to move left/right.</p>
+    <p><strong>Boost/Jump:</strong> Press the right joystick button to boost.</p>
+    <p><strong>Grab/Throw:</strong> Use the right trigger to grab; if already holding an object, it will be thrown in the direction you’re aiming.</p>
+    <p><strong>Melee Attack:</strong> Press the left trigger to execute a melee attack.</p>
+    <p><strong>Aiming:</strong> Use the right stick to aim your actions.</p>
+    <button id="closeInstructions" style="margin-top:20px; padding:10px 20px; font-size:18px;">Got it!</button>
+  `;
+  
+  // Append the pop-up to the body
+  document.body.appendChild(popup);
+  
+  // When the user dismisses the instructions, hide the pop-up and mark as shown
+  document.getElementById('closeInstructions').addEventListener('click', () => {
+    popup.style.display = 'none';
+    localStorage.setItem('instructionsShown', 'true');
+  });
+}
+
+// Call the function on page load
+window.addEventListener('load', showInstructionsOnce);
+
+    
     // Matter.js Modules
     const { Engine, World, Bodies, Body, Constraint, Events, Composites, Composite } = Matter;
 
