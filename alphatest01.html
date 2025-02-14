@@ -350,11 +350,11 @@
   background: url('overlay9.gif') center/cover no-repeat;
   pointer-events: none;
 }
- .booster-pixel {
+.booster-pixel {
   position: absolute;
   width: 4px;
   height: 4px;
-  /* A radial gradient gives a pixelated flame look */
+  /* A radial gradient creates a detailed pixelated flame look */
   background: radial-gradient(circle at center, #FFD700 0%, #FF8C00 50%, transparent 70%);
   image-rendering: pixelated;
   pointer-events: none;
@@ -387,6 +387,7 @@
     filter: drop-shadow(0 0 1px #FF4500);
   }
 }
+
 
 
   </style>
@@ -1760,33 +1761,31 @@ function createWall(x, y, width, height) {
         }
       }
 function createRocketBoosterEffect(player) {
-  // Calculate an offset so the effect appears behind the player's torso.
-  // If facing "right", the effect originates to the left (negative offset); if "left", to the right.
-  const offsetX = player.facing === "right" ? -30 : 30;
+  // Calculate an origin behind the direct center of the player's torso.
+  // For a player facing right, the effect originates slightly to the left of center;
+  // for a player facing left, it originates slightly to the right.
+  const offsetX = player.facing === "right" ? -15 : 15;
   const origin = {
     x: player.torso.position.x + offsetX,
-    y: player.torso.position.y + 10  // Adjust vertical offset as needed.
+    y: player.torso.position.y // Directly centered vertically.
   };
 
   const numPixels = 12;  // Number of pixel particles per jump
   for (let i = 0; i < numPixels; i++) {
     const pixel = document.createElement("div");
     pixel.className = "booster-pixel";
-    // Start each pixel at the calculated origin.
+    // Position each pixel at the computed origin.
     pixel.style.left = origin.x + "px";
     pixel.style.top = origin.y + "px";
-    // Randomize its displacement.
-    const dx = Math.random() * 20 - 10; // horizontal: -10 to 10 pixels
-    const dy = Math.random() * 20;      // vertical: 0 to 20 pixels upward
+    // Randomize displacement and rotation for natural variation.
+    const dx = Math.random() * 20 - 10;  // horizontal displacement: -10 to 10 pixels
+    const dy = Math.random() * 20;       // vertical displacement: 0 to 20 pixels upward
     pixel.style.setProperty("--dx", dx);
     pixel.style.setProperty("--dy", dy);
-    // Optionally randomize a slight rotation.
-    pixel.style.transform = `rotate(${Math.random() * 360}deg)`;
+    pixel.style.setProperty("--rotation", Math.random() * 360);
     game.appendChild(pixel);
-    // Remove the pixel after its animation completes.
-    setTimeout(() => {
-      pixel.parentNode && pixel.parentNode.removeChild(pixel);
-    }, 500);
+    // Remove the pixel after the animation completes.
+    setTimeout(() => pixel.remove(), 600);
   }
 }
 
