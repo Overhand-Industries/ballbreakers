@@ -2041,67 +2041,7 @@ function createRocketBoosterEffect(player) {
     const player = document.querySelector('.player-part');
     document.addEventListener('keyup', (e) => {
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { player.style.transform = "translate(-50%, -50%)"; }
-    }); // --- WASD for movement --- 
-document.addEventListener('keydown', (e) => {
-  switch(e.key.toLowerCase()){
-    case 'w': keys1["ArrowUp"] = true; break;
-    case 'a': keys1["ArrowLeft"] = true; break;
-    case 's': keys1["ArrowDown"] = true; break;
-    case 'd': keys1["ArrowRight"] = true; break;
-    // Spacebar for melee attack:
-    case ' ':
-      meleeAttack(playerChar1, keys1, joystickAim1);
-      break;
-  }
-});
-
-document.addEventListener('keyup', (e) => {
-  switch(e.key.toLowerCase()){
-    case 'w': keys1["ArrowUp"] = false; break;
-    case 'a': keys1["ArrowLeft"] = false; break;
-    case 's': keys1["ArrowDown"] = false; break;
-    case 'd': keys1["ArrowRight"] = false; break;
-  }
-});
-
-// --- Mouse movement for right stick aiming --- 
-// (Assumes that updateCamera stores current scale & camera offsets globally)
-document.addEventListener('mousemove', (e) => {
-  const rect = game.getBoundingClientRect();
-  // Use the same scale computed in updateCamera:
-  const scale = window.currentScale || 1;
-  // Convert mouse coordinates to game coordinates:
-  const mouseX = (e.clientX - rect.left) / scale + cameraX;
-  const mouseY = (e.clientY - rect.top) / scale + cameraY;
-  
-  const dx = mouseX - playerChar1.torso.position.x;
-  const dy = mouseY - playerChar1.torso.position.y;
-  const mag = Math.hypot(dx, dy);
-  if (mag > 0) {
-    joystickAim1.x = dx / mag;
-    joystickAim1.y = dy / mag;
-  } else {
-    joystickAim1.x = 0;
-    joystickAim1.y = 0;
-  }
-});
-
-// --- Mouse click for grab/throw --- 
-document.addEventListener('mousedown', (e) => {
-  // Only trigger on left click (e.button === 0)
-  if (e.button === 0) {
-    playerShoot(playerChar1, keys1, joystickAim1);
-  }
-});
-
-// In updateCamera, store the scale globally:
-function updateCamera() {
-  // ... existing code ...
-  // After calculating scale:
-  window.currentScale = scale; // make scale available for mouse coordinate conversion
-  // ... rest of the updateCamera code ...
-}
-
+    });
   </script>
 </body>
 </html>
