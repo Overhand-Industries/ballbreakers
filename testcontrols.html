@@ -418,46 +418,61 @@
   <!-- Matter.js Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <script>
-    function showInstructionsOnce() {
-      if (localStorage.getItem('instructionsShown')) { return; }
-      const popup = document.createElement('div');
-      popup.id = 'instructions-popup';
-      popup.style.position = 'fixed';
-      popup.style.top = '0';
-      popup.style.left = '0';
-      popup.style.width = '100vw';
-      popup.style.height = '100vh';
-      popup.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-      popup.style.color = '#fff';
-      popup.style.display = 'flex';
-      popup.style.flexDirection = 'column';
-      popup.style.justifyContent = 'center';
-      popup.style.alignItems = 'center';
-      popup.style.zIndex = '1000';
-      popup.style.textAlign = 'center';
-      popup.style.padding = '20px';
+    // ================================================
+    // Global Camera Variables & updateCamera Function
+    // ================================================
+    let cameraX = 0, cameraY = 0;
+    function updateCamera() {
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
       
-      popup.innerHTML = `
-        <h1>How to Play</h1>
-        <p><strong>Movement:</strong> Use the left stick or D-pad to move left/right.</p>
-        <p><strong>Boost/Jump:</strong> Press the right joystick button to boost.</p>
-        <p><strong>Grab/Throw:</strong> Hold the grab button (mouse left-click or gamepad button 7) to latch onto an enemy. Aim with your right stick or mouse and release to throw.</p>
-        <p><strong>Melee Attack:</strong> Press the left trigger or spacebar for a melee attack.</p>
-        <p><strong>Aiming:</strong> Use the right stick or move your mouse to aim.</p>
-        <button id="closeInstructions" style="margin-top:20px; padding:10px 20px; font-size:18px;">Got it!</button>
-      `;
+      let points = [
+        playerChar1.torso.position,
+        playerChar2.torso.position
+      ];
+      if (enemies.length > 0) {
+        points.push(enemies[0].body.position);
+      }
       
-      document.body.appendChild(popup);
-      
-      document.getElementById('closeInstructions').addEventListener('click', () => {
-        popup.style.display = 'none';
-        localStorage.setItem('instructionsShown', 'true');
+      let sumX = 0, sumY = 0;
+      points.forEach(p => {
+        sumX += p.x;
+        sumY += p.y;
       });
+      const centerX = sumX / points.length;
+      const centerY = sumY / points.length;
+      
+      const margin = 100;
+      let minX = Math.min(...points.map(p => p.x)) - margin;
+      let maxX = Math.max(...points.map(p => p.x)) + margin;
+      let minY = Math.min(...points.map(p => p.y)) - margin;
+      let maxY = Math.max(...points.map(p => p.y)) + margin;
+      
+      const boxWidth = maxX - minX;
+      const boxHeight = maxY - minY;
+      
+      const scaleX = screenWidth / boxWidth;
+      const scaleY = screenHeight / boxHeight;
+      let scale = Math.min(scaleX, scaleY, 1);
+      window.currentScale = scale;
+      
+      let camX = centerX - screenWidth / (2 * scale);
+      let camY = centerY - screenHeight / (2 * scale);
+      
+      camX = Math.max(0, Math.min(camX, levelWidth - screenWidth / scale));
+      camY = Math.max(0, Math.min(camY, gameHeight - screenHeight / scale));
+      
+      cameraX = camX;
+      cameraY = camY;
+      
+      game.style.transformOrigin = "top left";
+      game.style.transform = `translate(-${cameraX}px, -${cameraY}px) scale(${scale})`;
+      document.getElementById("parallax").style.backgroundPosition = (-cameraX * 0.5) + "px 0";
     }
     
-    window.addEventListener('load', showInstructionsOnce);
-
-    // Matter.js Modules
+    // ================================================
+    // Other Global Variables and Setup
+    // ================================================
     const { Engine, World, Bodies, Body, Constraint, Events, Composites, Composite } = Matter;
     const game = document.getElementById("game");
     let engine = Engine.create();
@@ -480,14 +495,14 @@
     const groundExtraHeight = 100;
     game.style.width = levelWidth + "px";
     game.style.height = gameHeight + "px";
-
+    
     const groundEl = document.createElement("div");
     groundEl.id = "ground";
     groundEl.style.top = (playAreaHeight - 20) + "px";
     groundEl.style.width = (levelWidth + 40) + "px";
     groundEl.style.height = groundExtraHeight + "px";
     game.appendChild(groundEl);
-
+    
     function createDomElement(body, cls, w, h) {
       const el = document.createElement("div");
       el.className = "entity " + cls;
@@ -497,7 +512,7 @@
       body.domElement = el;
       domEntities.push(body);
     }
-
+    
     function createPlatform(x, y, width, height) {
       const slope = Math.random() * 0.4 + 0.3;
       const options = { isStatic: true, label: "platform", density: 0.01 };
@@ -519,7 +534,7 @@
       boulder.domElement = el;
       platforms.push(boulder);
     }
-
+    
     function createWall(x, y, width, height) {
       let body, el;
       if (y < playAreaHeight / 2) {
@@ -533,7 +548,7 @@
         body.height = height;
         body.hp = 100;
         World.add(world, body);
-
+    
         el = document.createElement("div");
         el.className = "stalactite";
         el.style.width = width + "px";
@@ -553,7 +568,7 @@
         body.height = height;
         body.hp = 100;
         World.add(world, body);
-
+    
         el = document.createElement("div");
         el.className = "stalagmite";
         el.style.width = width + "px";
@@ -568,7 +583,7 @@
       walls.push(body);
       return body;
     }
-
+    
     for (let i = 0; i < 2; i++) {
       const width = Math.floor(Math.random() * 101) + 200;
       const x = Math.random() * (levelWidth - width);
@@ -580,7 +595,7 @@
       const x = Math.random() * (levelWidth - width);
       createWall(x, 100, width, 200);
     }
-
+    
     const groundBody = Bodies.rectangle(levelWidth / 2, playAreaHeight, levelWidth + 40, 40, { isStatic: true });
     const leftBoundary = Bodies.rectangle(0, playAreaHeight / 2, 40, playAreaHeight, { isStatic: true });
     const rightBoundary = Bodies.rectangle(levelWidth, playAreaHeight / 2, 40, playAreaHeight, { isStatic: true });
@@ -588,7 +603,7 @@
     const safetyFloorY = playAreaHeight + 50;
     const safetyFloor = Bodies.rectangle(levelWidth / 2, safetyFloorY, levelWidth, 40, { isStatic: true, label: "safetyFloor" });
     World.add(world, safetyFloor);
-
+    
     const goalWidth = 20, goalHeight = 200;
     const leftGoal = Bodies.rectangle(50, playAreaHeight/2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "leftGoal" });
     const rightGoal = Bodies.rectangle(levelWidth - 50, playAreaHeight/2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "rightGoal" });
@@ -639,7 +654,7 @@
     }
     createWallDom(leftGoalWall, "left");
     createWallDom(rightGoalWall, "right");
-
+    
     function createTentacleComposite(x, y, segments, segmentLength, segmentRadius) {
       const tentacle = Composites.stack(x, y, segments, 1, 0, 0, function(x, y) {
         return Bodies.circle(x, y, segmentRadius, { collisionFilter: { group: -1 }, frictionAir: 0.1 });
@@ -665,14 +680,14 @@
       Composite.add(world, [tentacle, constraint]);
       return tentacle;
     }
-
+    
     function createCharacter(x, y) {
       const char = { hp: 100, alive: true, spawn: { x, y }, heldObject: null, isDying: false };
       char.facing = "right";
       const size = 20;
       const torsoOptions = { friction: 6.0, frictionAir: 0.11, restitution: 0 };
       const defaultOptions = { friction: 0.5, frictionAir: 0.01, restitution: 0 };
-
+    
       const hpContainer = document.createElement("div");
       hpContainer.className = "hp-bar-container";
       const hpBar = document.createElement("div");
@@ -681,7 +696,7 @@
       game.appendChild(hpContainer);
       char.hpContainer = hpContainer;
       char.hpBar = hpBar;
-
+    
       function addPart(body, cls, w, h) {
         createDomElement(body, cls, w, h);
         body.character = char;
@@ -696,7 +711,7 @@
         }
         return body;
       }
-
+    
       const head = Bodies.circle(x, y - 40, size / 2, defaultOptions);
       addPart(head, "player-part head", size, size);
       const torso = Bodies.circle(x, y - 20, size, torsoOptions);
@@ -717,9 +732,9 @@
       addPart(leftUpperLeg, "player-part leg", size, size);
       const leftFoot = Bodies.circle(x - 10, y + 30, size / 2, defaultOptions);
       addPart(leftFoot, "player-part foot", size, size);
-
+    
       World.add(world, [head, torso, rightUpperArm, rightHand, leftUpperArm, leftHand, rightUpperLeg, rightFoot, leftUpperLeg, leftFoot]);
-
+    
       function link(a, b, offA, offB) {
         const con = Constraint.create({
           bodyA: a, pointA: offA, bodyB: b, pointB: offB,
@@ -736,7 +751,7 @@
       link(rightUpperLeg, rightFoot, { x: 0, y: 0 }, { x: 0, y: -20 });
       link(torso, leftUpperLeg, { x: -10, y: size }, { x: 0, y: -size/2 });
       link(leftUpperLeg, leftFoot, { x: 0, y: 0 }, { x: 0, y: -20 });
-
+    
       char.head = head; 
       char.torso = torso;
       char.rightUpperArm = rightUpperArm; 
@@ -747,12 +762,12 @@
       char.rightFoot = rightFoot;
       char.leftUpperLeg = leftUpperLeg; 
       char.leftFoot = leftFoot;
-
+    
       return char;
     }
     let playerChar1 = createCharacter(100, playAreaHeight / 2);
     let playerChar2 = createCharacter(levelWidth - 100, playAreaHeight / 2);
-
+    
     function addPlayerClass(player, className) {
       let parts = [player.head, player.torso, player.rightUpperArm, player.rightHand,
                    player.leftUpperArm, player.leftHand, player.rightUpperLeg, player.rightFoot,
@@ -765,7 +780,7 @@
     }
     addPlayerClass(playerChar1, "player1");
     addPlayerClass(playerChar2, "player2");
-
+    
     function createEnemy(x, y) {
       let enemy = {
         hp: 50,
@@ -821,7 +836,7 @@
       return enemy;
     }
     createEnemy(levelWidth / 2, playAreaHeight / 2);
-
+    
     // NEW: Grab/Throw functions
     function grabStart(player, joystickAim) {
       if (!player.heldObject) {
@@ -848,7 +863,7 @@
         }
       }
     }
-
+    
     function grabRelease(player, keys, joystickAim) {
       if (player.heldObject) {
         let obj = player.heldObject;
@@ -873,7 +888,7 @@
         player.heldObject = null;
       }
     }
-
+    
     function updateHeldObject(player, joystickAim) {
       if (player.heldObject) {
         const offsetDistance = 40;
@@ -887,9 +902,9 @@
         Body.setPosition(player.heldObject, { x: targetX, y: targetY });
       }
     }
-
+    
     // OLD playerShoot remains defined but is not used for grab/throw
-
+    
     function isWithinCone(origin, direction, targetPos, range, angleThreshold) {
       const vector = { x: targetPos.x - origin.x, y: targetPos.y - origin.y };
       const distance = Math.hypot(vector.x, vector.y);
@@ -900,6 +915,7 @@
       if (diff > Math.PI) diff = 2 * Math.PI - diff;
       return diff <= angleThreshold;
     }
+    
     function meleeAttack(player, keys, joystickAim) {
       let inputDir = { x: 0, y: 0 };
       if (keys["ArrowLeft"]) inputDir.x -= 1;
@@ -952,7 +968,7 @@
         step++;
         if (step >= steps) clearInterval(interval);
       }, stepTime);
-
+    
       setTimeout(() => {
         const attackOrigin = attackHand.position;
         const meleeRange = 60;
@@ -1004,7 +1020,7 @@
         });
       }, 100);
     }
-
+    
     function digitalPixelExplosion(x, y) {
       triggerScreenshake();     
       const numPixels = 50;
@@ -1035,7 +1051,7 @@
         setTimeout(() => { if (pixel.parentNode) { pixel.parentNode.removeChild(pixel); } }, 1000);
       }
     }
-
+    
     let coinCount = 0;
     function collectCoin(coin) {
       coinCount++;
@@ -1140,12 +1156,12 @@
       flash.classList.remove("flash");
       void flash.offsetWidth;
       flash.classList.add("flash");
-
+    
       let screenEl = document.getElementById("screen");
       screenEl.classList.remove("shake");
       void screenEl.offsetWidth;
       screenEl.classList.add("shake");
-
+    
       let goalText = document.createElement("div");
       goalText.id = "goalText";
       goalText.innerText = "GOAL!";
@@ -1206,7 +1222,7 @@
       });
     }
     
-    // --- NEW: Keyboard and Mouse Controls (WASD, Mouse Aiming) ---
+    // NEW: Keyboard and Mouse Controls (WASD, Mouse Aiming)
     document.addEventListener('keydown', (e) => {
       switch(e.key.toLowerCase()){
         case 'w': keys1["ArrowUp"] = true; break;
@@ -1219,7 +1235,7 @@
           break;
       }
     });
-
+    
     document.addEventListener('keyup', (e) => {
       switch(e.key.toLowerCase()){
         case 'w': keys1["ArrowUp"] = false; break;
@@ -1228,8 +1244,7 @@
         case 'd': keys1["ArrowRight"] = false; break;
       }
     });
-
-    // Use mousemove to update aim (right stick simulation)
+    
     document.addEventListener('mousemove', (e) => {
       const rect = game.getBoundingClientRect();
       const scale = window.currentScale || 1;
@@ -1247,8 +1262,8 @@
         joystickAim1.y = 0;
       }
     });
-
-    // --- NEW: Grab with Mouse (hold left button)
+    
+    // Grab with Mouse: hold left button
     document.addEventListener('mousedown', (e) => {
       if (e.button === 0) {
         grabStart(playerChar1, joystickAim1);
@@ -1259,8 +1274,10 @@
         grabRelease(playerChar1, keys1, joystickAim1);
       }
     });
-
-    // --- Gamepad Support ---
+    
+    // ================================================
+    // Gamepad Support
+    // ================================================
     let lastGamepadButtonState = {};
     window.addEventListener("gamepadconnected", (e) => {
       console.log("Gamepad connected:", e.gamepad);
@@ -1293,7 +1310,7 @@
             keys1["ArrowRight"] = true; keys1["ArrowLeft"] = false;
           } else { keys1["ArrowLeft"] = false; keys1["ArrowRight"] = false; }
           keys1["ArrowUp"] = false;
-          // Use button[7] as the grab button:
+          // Use button[7] as grab:
           const grabPressed = gp.buttons[7].pressed;
           const wasGrabPressed = lastGamepadButtonState[gp.index] ? lastGamepadButtonState[gp.index][7] : false;
           if (grabPressed && !wasGrabPressed) {
@@ -1338,13 +1355,17 @@
         }
       }
     }
+    
+    // ================================================
+    // Main Update Loop
+    // ================================================
     function update() {
       updateGamepadInput();
       Engine.update(engine, 1000/60);
       engine.positionIterations = 10;
       engine.velocityIterations = 10;
       engine.constraintIterations = 4;
-
+    
       if (keys1["ArrowLeft"]) {
         playerChar1.facing = "left";
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: -0.01, y: 0 });
@@ -1384,7 +1405,7 @@
         });
         createRocketBoosterEffect(playerChar1);
       }
-
+    
       if (keys2["ArrowLeft"]) {
         playerChar2.facing = "left";
         Body.applyForce(playerChar2.torso, playerChar2.torso.position, { x: -0.01, y: 0 });
@@ -1424,7 +1445,7 @@
         });
         createRocketBoosterEffect(playerChar2);
       }
-
+    
       if (playerChar1.torso.position.y < playAreaHeight - 30) {
         let airInput = { x: 0, y: 0 };
         if (keys1["ArrowLeft"])  airInput.x -= 1;
@@ -1442,7 +1463,7 @@
           });
         }
       }
-
+    
       if (playerChar2.torso.position.y < playAreaHeight - 30) {
         let airInput = { x: 0, y: 0 };
         if (keys2["ArrowLeft"])  airInput.x -= 1;
@@ -1481,7 +1502,7 @@
           setTimeout(() => pixel.remove(), 600);
         }
       }
-
+    
       domEntities.forEach(body => {
         if (body.domElement) {
           body.domElement.style.left = body.position.x + "px";
@@ -1664,13 +1685,13 @@
         }
       });
       
-      // Call checkEnemyOutOfBounds to remove enemies out of bounds.
+      // Call checkEnemyOutOfBounds to remove offscreen enemies
       checkEnemyOutOfBounds();
       updateCamera();
       requestAnimationFrame(update);
     }
     update();
-
+    
     (function() {
       const joystick = document.getElementById("joystick");
       let startX, startY;
@@ -1708,7 +1729,7 @@
       joystick.addEventListener("touchend", (e) => { dragging = false; snapBack(); e.preventDefault(); });
       joystick.addEventListener("touchcancel", (e) => { dragging = false; snapBack(); e.preventDefault(); });
     })();
-
+    
     const dpad = document.getElementById("dpad");
     dpad.querySelector(".up").addEventListener("touchstart", (e) => { e.preventDefault(); keys1["ArrowUp"] = true; });
     dpad.querySelector(".up").addEventListener("touchend", (e) => { e.preventDefault(); keys1["ArrowUp"] = false; });
