@@ -546,20 +546,28 @@
     
     /* --- Grab & Throw Functions (for playable character) --- */
 // In your grabStart function – if candidate is an enemy, create a constraint:
+// --- Two-Hand Grab/Throw Logic for Enemy Objects ---
+
+// When a grab is initiated, find a candidate within range.
+// If the candidate is an enemy, attach both hands to it.
 function grabStart(player, joystickAim) {
+  // Only try to grab if nothing is already held.
   if (!player.heldObject) {
     const grabRange = 1000;
-    let handPos = (player.facing === "left")
-                  ? player.leftHand.position
-                  : player.rightHand.position;
+    // Use the center between the two hands as a reference.
+    const center = {
+      x: (player.leftHand.position.x + player.rightHand.position.x) / 2,
+      y: (player.leftHand.position.y + player.rightHand.position.y) / 2
+    };
     let bodies = Composite.allBodies(world);
     let candidate = null, candidateDist = Infinity;
-    for (let i = 0; i < bodies.length; i++){
+    for (let i = 0; i < bodies.length; i++) {
       let body = bodies[i];
+      // Skip static bodies, the player’s own parts, bullets, and goal sensors.
       if (body.isStatic || body.character || body.label === "bullet" ||
           body.label === "leftGoal" || body.label === "rightGoal") continue;
-      let dx = body.position.x - handPos.x;
-      let dy = body.position.y - handPos.y;
+      let dx = body.position.x - center.x;
+      let dy = body.position.y - center.y;
       let dist = Math.hypot(dx, dy);
       if (dist < grabRange && dist < candidateDist) {
         candidate = body;
@@ -567,77 +575,93 @@ function grabStart(player, joystickAim) {
       }
     }
     if (candidate) {
+      // Grab candidate and disable its collisions.
       player.heldObject = candidate;
-      candidate.collisionFilter.mask = 0; // disable collisions while held
-      
-      // If the candidate is an enemy, attach via a constraint.
+      candidate.collisionFilter.mask = 0;
+      // For enemy objects, attach both hands.
       if (candidate.label === "enemy") {
-        // Calculate an anchor point on the enemy.
-        // For example, offset to its side (adjust as needed):
-        const enemyAnchor = { x: candidate.position.x + (player.facing === "left" ? -20 : 20), y: candidate.position.y };
-        // Create a constraint between the player's hand and the enemy.
-        player.grabConstraint = Constraint.create({
-          bodyA: (player.facing === "left") ? player.leftHand : player.rightHand,
+        // Define fixed offsets relative to the enemy’s center.
+        // You can adjust these values to get the desired “grip.”
+        const leftOffset = { x: -20, y: 0 };
+        const rightOffset = { x: 20, y: 0 };
+        // Create constraints from each hand.
+        player.leftGrabConstraint = Constraint.create({
+          bodyA: player.leftHand,
           pointA: { x: 0, y: 0 },
           bodyB: candidate,
-          pointB: {
-            x: enemyAnchor.x - candidate.position.x,
-            y: enemyAnchor.y - candidate.position.y
-          },
+          // Anchor on enemy: left side offset
+          pointB: leftOffset,
           stiffness: 0.9,
           length: 0
         });
-        World.add(world, player.grabConstraint);
+        player.rightGrabConstraint = Constraint.create({
+          bodyA: player.rightHand,
+          pointA: { x: 0, y: 0 },
+          bodyB: candidate,
+          // Anchor on enemy: right side offset
+          pointB: rightOffset,
+          stiffness: 0.9,
+          length: 0
+        });
+        World.add(world, [player.leftGrabConstraint, player.rightGrabConstraint]);
       }
+      // (For non‑enemy objects, you could instead update its position manually in updateHeldObject.)
     }
   }
 }
 
-// In grabRelease, remove the constraint if it exists:
+// When releasing the grab, remove any constraints and throw the held object.
 function grabRelease(player, keys, joystickAim) {
   if (player.heldObject) {
-    // If a constraint was created, remove it.
-    if (player.grabConstraint) {
-      World.remove(world, player.grabConstraint);
-      player.grabConstraint = null;
-    } else {
-      // For non‐enemy objects, do your usual throw logic:
-      let obj = player.heldObject;
-      let dx = 0, dy = 0;
-      const aimMag = Math.hypot(joystickAim.x, joystickAim.y);
-      if (aimMag > 0.1) {
-        dx = joystickAim.x; dy = joystickAim.y;
-      } else {
-        if (keys["ArrowUp"])    dy = -1;
-        if (keys["ArrowDown"])  dy =  1;
-        if (keys["ArrowLeft"])  dx = -1;
-        if (keys["ArrowRight"]) dx =  1;
-        if (dx === 0 && dy === 0) dx = (player.facing === "left") ? -1 : 1;
-        let mag = Math.hypot(dx, dy);
-        dx /= mag; dy /= mag;
-      }
-      const throwSpeed = 55;
-      Body.setVelocity(obj, { x: dx * throwSpeed, y: dy * throwSpeed });
-      obj.collisionFilter.mask = 0xFFFFFFFF;
+    // Remove any grab constraints (if they exist)
+    if (player.leftGrabConstraint) {
+      World.remove(world, player.leftGrabConstraint);
+      player.leftGrabConstraint = null;
     }
+    if (player.rightGrabConstraint) {
+      World.remove(world, player.rightGrabConstraint);
+      player.rightGrabConstraint = null;
+    }
+    // Throw the held object.
+    throwHeldObject(player.heldObject, player, joystickAim);
     player.heldObject = null;
   }
 }
 
-// In your updateHeldObject function, if you want to update the position
-// for non-constraint-based grabs, you can do so as before.
+// Compute and apply a throw impulse based on the current aim.
+function throwHeldObject(obj, player, joystickAim) {
+  let dx = 0, dy = 0;
+  const aimMag = Math.hypot(joystickAim.x, joystickAim.y);
+  if (aimMag > 0.1) {
+    dx = joystickAim.x; dy = joystickAim.y;
+  } else {
+    // Fallback: throw in the player's facing direction.
+    dx = (player.facing === "left") ? -1 : 1;
+    dy = 0;
+  }
+  const throwSpeed = 55;
+  Body.setVelocity(obj, { x: dx * throwSpeed, y: dy * throwSpeed });
+  // Re-enable collisions.
+  obj.collisionFilter.mask = 0xFFFFFFFF;
+}
+
+// For non‑enemy objects (if needed), update their position relative to the player's torso.
 function updateHeldObject(player, joystickAim) {
-  if (player.heldObject && !player.grabConstraint) {
+  // If an object is held without constraints (non‑enemy), update its position.
+  if (player.heldObject && !player.leftGrabConstraint && !player.rightGrabConstraint) {
     const offsetDistance = 40;
     let aimX = joystickAim.x, aimY = joystickAim.y;
     if (Math.hypot(aimX, aimY) < 0.1) {
-      aimX = (player.facing === "left") ? -1 : 1; aimY = 0;
+      // Default offset: in front of the player.
+      aimX = (player.facing === "left") ? -1 : 1;
+      aimY = 0;
     }
     const targetX = player.torso.position.x + aimX * offsetDistance;
     const targetY = player.torso.position.y + aimY * offsetDistance;
     Body.setPosition(player.heldObject, { x: targetX, y: targetY });
   }
 }
+
 
     /* --- Melee Attack Function --- */
     function isWithinCone(origin, direction, targetPos, range, angleThreshold) {
