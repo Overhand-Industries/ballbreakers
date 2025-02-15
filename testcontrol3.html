@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <!-- The viewport-fit=cover tells supported browsers to use the full display area -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
-  <title>ballbreakers – Platformer with Fast-Fall</title>
+  <title>ballbreakers – Platformer with Fast-Fall & Auto-Grab</title>
   <style>
     /* Reset & Full-Screen Setup */
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -31,8 +31,6 @@
     #game { position: absolute; top: 0; left: 0; z-index: 1; }
     /* Ground */
     #ground { position: absolute; left: 0; background: #0d0c29; }
-    
-    /* (On-screen controls removed) */
     
     /* In-Game Entity Styling */
     .entity { position: absolute; transform: translate(-50%, -50%); pointer-events: none; transition: transform 0.5s ease, opacity 0.5s ease; }
@@ -313,7 +311,7 @@
       return body;
     }
     
-    // Spawn test platforms & walls
+    // Spawn test platforms & walls.
     for (let i = 0; i < 2; i++) {
       const width = Math.floor(Math.random()*101)+200;
       const x = Math.random()*(levelWidth-width);
@@ -413,10 +411,10 @@
       char.facing = "right";
       // For jump state and slingshot charge.
       char.jumpReady = true;
-      char.jumpCounter = 0; // (Using impulse jump now.)
+      char.jumpCounter = 0;
       char.slingCharge = 0;
       const size = 20;
-      const torsoOptions = { friction: 6.0, frictionAir: 0.11, restitution: .5 };
+      const torsoOptions = { friction: 6.0, frictionAir: 0.11, restitution: 0 };
       const defaultOptions = { friction: 0.5, frictionAir: 0.01, restitution: 0 };
       
       const hpContainer = document.createElement("div");
@@ -544,181 +542,127 @@
     }
     createEnemy(levelWidth/2, playAreaHeight/2);
     
+    /* --- NEW: Hand Orientation & Auto-Grab Functions --- */
+    function updateHandOrientation(player, joystickAim) {
+      if (Math.hypot(joystickAim.x, joystickAim.y) > 0.1) {
+        let aimAngle = Math.atan2(joystickAim.y, joystickAim.x);
+        Body.setAngle(player.leftHand, aimAngle);
+        Body.setAngle(player.rightHand, aimAngle);
+      }
+    }
+    function autoGrabIfInRange(player, joystickAim) {
+      if (player.heldObject) return;
+      const reachThreshold = 50;
+      let hands = [player.leftHand, player.rightHand];
+      let bodies = Composite.allBodies(world);
+      for (let hand of hands) {
+        for (let body of bodies) {
+          if (body.isStatic || body.character || body.label === "bullet" ||
+              body.label === "leftGoal" || body.label === "rightGoal") continue;
+          if (body.label !== "enemy") continue;
+          const dx = body.position.x - hand.position.x;
+          const dy = body.position.y - hand.position.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < reachThreshold) {
+            grabStart(player, joystickAim);
+            return;
+          }
+        }
+      }
+    }
+    
     /* --- Grab & Throw Functions (for playable character) --- */
-// In your grabStart function – if candidate is an enemy, create a constraint:
-// --- Two-Hand Grab/Throw Logic for Enemy Objects ---
-
-// When a grab is initiated, find a candidate within range.
-// If the candidate is an enemy, attach both hands to it.
-// --- Two-Hand Grab/Throw Functions for Enemy Objects ---
-
-// Called when the player initiates a grab (e.g. mouse down or gamepad button)
-function grabStart(player, joystickAim) {
-  // Only attempt a grab if nothing is held
-  if (!player.heldObject) {
-    const grabRange = 1000;
-    // Use the midpoint between both hands as our reference point.
-    const midPoint = {
-      x: (player.leftHand.position.x + player.rightHand.position.x) / 2,
-      y: (player.leftHand.position.y + player.rightHand.position.y) / 2
-    };
-
-    let bodies = Composite.allBodies(world);
-    let candidate = null, candidateDist = Infinity;
-    for (let i = 0; i < bodies.length; i++) {
-      let body = bodies[i];
-      // Skip static bodies, the player's own parts, bullets, and goal sensors.
-      if (body.isStatic || body.character || body.label === "bullet" ||
-          body.label === "leftGoal" || body.label === "rightGoal") continue;
-      let dx = body.position.x - midPoint.x;
-      let dy = body.position.y - midPoint.y;
-      let dist = Math.hypot(dx, dy);
-      if (dist < grabRange && dist < candidateDist) {
-        candidate = body;
-        candidateDist = dist;
+    function grabStart(player, joystickAim) {
+      if (!player.heldObject) {
+        const grabRange = 1000;
+        // Use the center between both hands.
+        const center = {
+          x: (player.leftHand.position.x + player.rightHand.position.x) / 2,
+          y: (player.leftHand.position.y + player.rightHand.position.y) / 2
+        };
+        let bodies = Composite.allBodies(world);
+        let candidate = null, candidateDist = Infinity;
+        for (let i = 0; i < bodies.length; i++){
+          let body = bodies[i];
+          if (body.isStatic || body.character || body.label === "bullet" ||
+              body.label === "leftGoal" || body.label === "rightGoal") continue;
+          let dx = body.position.x - center.x;
+          let dy = body.position.y - center.y;
+          let dist = Math.hypot(dx, dy);
+          if (dist < grabRange && dist < candidateDist) {
+            candidate = body;
+            candidateDist = dist;
+          }
+        }
+        if (candidate) {
+          player.heldObject = candidate;
+          candidate.collisionFilter.mask = 0; // disable collisions while held
+          // For enemy objects, attach both hands.
+          if (candidate.label === "enemy") {
+            const leftOffset = { x: -20, y: 0 };
+            const rightOffset = { x: 20, y: 0 };
+            player.leftGrabConstraint = Constraint.create({
+              bodyA: player.leftHand,
+              pointA: { x: 0, y: 0 },
+              bodyB: candidate,
+              pointB: leftOffset,
+              stiffness: 0.9,
+              length: 0
+            });
+            player.rightGrabConstraint = Constraint.create({
+              bodyA: player.rightHand,
+              pointA: { x: 0, y: 0 },
+              bodyB: candidate,
+              pointB: rightOffset,
+              stiffness: 0.9,
+              length: 0
+            });
+            World.add(world, [player.leftGrabConstraint, player.rightGrabConstraint]);
+          }
+        }
       }
     }
-    console.log("Grab candidate:", candidate); // Debug: Check candidate selection
-
-    if (candidate) {
-      // Save the grabbed object and disable its collisions
-      player.heldObject = candidate;
-      candidate.collisionFilter.mask = 0;
-      // If it's an enemy, attach both hands via constraints.
-      if (candidate.label === "enemy") {
-        // These offsets determine where on the enemy the hands attach.
-        // Adjust these values if your enemy sprite/physics body isn’t centered.
-        const leftOffset = { x: -20, y: 0 };
-        const rightOffset = { x: 20, y: 0 };
-        player.leftGrabConstraint = Constraint.create({
-          bodyA: player.leftHand,
-          pointA: { x: 0, y: 0 },
-          bodyB: candidate,
-          pointB: leftOffset,
-          stiffness: 0.9,
-          length: 0
-        });
-        player.rightGrabConstraint = Constraint.create({
-          bodyA: player.rightHand,
-          pointA: { x: 0, y: 0 },
-          bodyB: candidate,
-          pointB: rightOffset,
-          stiffness: 0.9,
-          length: 0
-        });
-        World.add(world, [player.leftGrabConstraint, player.rightGrabConstraint]);
-        console.log("Created grab constraints:", player.leftGrabConstraint, player.rightGrabConstraint);
-      }
-      // (For non-enemy objects, you could update their position manually in updateHeldObject.)
-    }
-  }
-}
-
-// Called when the grab is released (e.g. mouse up or gamepad release)
-function grabRelease(player, keys, joystickAim) {
-  if (player.heldObject) {
-    // If any grab constraints exist, remove them.
-    if (player.leftGrabConstraint) {
-      World.remove(world, player.leftGrabConstraint);
-      player.leftGrabConstraint = null;
-    }
-    if (player.rightGrabConstraint) {
-      World.remove(world, player.rightGrabConstraint);
-      player.rightGrabConstraint = null;
-    }
-    // Then throw the held object with the current aim.
-    throwHeldObject(player.heldObject, player, joystickAim);
-    player.heldObject = null;
-  }
-}
-
-// Applies a throw impulse to the held object based on the current aim.
-function throwHeldObject(obj, player, joystickAim) {
-  let dx = 0, dy = 0;
-  const aimMag = Math.hypot(joystickAim.x, joystickAim.y);
-  if (aimMag > 0.1) {
-    dx = joystickAim.x;
-    dy = joystickAim.y;
-  } else {
-    // If no aim is provided, throw in the player’s facing direction.
-    dx = (player.facing === "left") ? -1 : 1;
-    dy = 0;
-  }
-  const throwSpeed = 55; // Adjust as desired
-  Body.setVelocity(obj, { x: dx * throwSpeed, y: dy * throwSpeed });
-  // Re-enable collisions for the object.
-  obj.collisionFilter.mask = 0xFFFFFFFF;
-  console.log("Throwing object with velocity:", dx * throwSpeed, dy * throwSpeed);
-}
-
-// For non-enemy objects (if applicable), update the held object's position relative to the player's torso.
-function updateHeldObject(player, joystickAim) {
-  if (player.heldObject && !player.leftGrabConstraint && !player.rightGrabConstraint) {
-    const offsetDistance = 40;
-    let aimX = joystickAim.x, aimY = joystickAim.y;
-    if (Math.hypot(aimX, aimY) < 0.1) {
-      // Default: position the object in front of the player.
-      aimX = (player.facing === "left") ? -1 : 1;
-      aimY = 0;
-    }
-    const targetX = player.torso.position.x + aimX * offsetDistance;
-    const targetY = player.torso.position.y + aimY * offsetDistance;
-    Body.setPosition(player.heldObject, { x: targetX, y: targetY });
-  }
-}
-// In your main update loop (after processing input and before calling updateHeldObject):
-
-// Compute aim angle from joystick/mouse for player 1 (and similarly for player 2)
-function updateHandOrientation(player, joystickAim) {
-  // Only update if the aim vector is nonzero; otherwise, default to 0 (or face forward)
-  if (Math.hypot(joystickAim.x, joystickAim.y) > 0.1) {
-    let aimAngle = Math.atan2(joystickAim.y, joystickAim.x);
-    // Set both hands to this angle (you might want to add an offset for left/right if needed)
-    Body.setAngle(player.leftHand, aimAngle);
-    Body.setAngle(player.rightHand, aimAngle);
-  }
-}
-
-// Auto-grab check: if an enemy is within a given reach of either hand along the aim direction, call grabStart.
-function autoGrabIfInRange(player, joystickAim) {
-  // Only proceed if an object is not already held.
-  if (player.heldObject) return;
-  
-  // Define a threshold distance (e.g., 50 pixels) within which the enemy must be from a hand.
-  const reachThreshold = 50;
-  
-  // Check each hand’s position.
-  let hands = [player.leftHand, player.rightHand];
-  let bodies = Composite.allBodies(world);
-  for (let hand of hands) {
-    // For each candidate body in the world...
-    for (let body of bodies) {
-      // Skip static bodies, player's own parts, bullets, and goal sensors.
-      if (body.isStatic || body.character || body.label === "bullet" ||
-          body.label === "leftGoal" || body.label === "rightGoal") continue;
-      // Only consider enemy objects (or adjust if you want to grab other items).
-      if (body.label !== "enemy") continue;
-      // Compute distance from hand to candidate.
-      const dx = body.position.x - hand.position.x;
-      const dy = body.position.y - hand.position.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < reachThreshold) {
-        console.log("Auto-grab candidate found at distance:", dist);
-        // Call grabStart (this function will attach both hands if the candidate is an enemy).
-        grabStart(player, joystickAim);
-        return; // Only grab one candidate.
+    function grabRelease(player, keys, joystickAim) {
+      if (player.heldObject) {
+        if (player.leftGrabConstraint) {
+          World.remove(world, player.leftGrabConstraint);
+          player.leftGrabConstraint = null;
+        }
+        if (player.rightGrabConstraint) {
+          World.remove(world, player.rightGrabConstraint);
+          player.rightGrabConstraint = null;
+        }
+        throwHeldObject(player.heldObject, player, joystickAim);
+        player.heldObject = null;
       }
     }
-  }
-}
-
-// Then in your update loop for player 1 (and similarly for player 2):
-updateHandOrientation(playerChar1, joystickAim1);
-autoGrabIfInRange(playerChar1, joystickAim1);
-
-// (Rest of your update loop code follows…)
-
-
+    function throwHeldObject(obj, player, joystickAim) {
+      let dx = 0, dy = 0;
+      const aimMag = Math.hypot(joystickAim.x, joystickAim.y);
+      if (aimMag > 0.1) {
+        dx = joystickAim.x; dy = joystickAim.y;
+      } else {
+        dx = (player.facing === "left") ? -1 : 1;
+        dy = 0;
+      }
+      const throwSpeed = 55;
+      Body.setVelocity(obj, { x: dx * throwSpeed, y: dy * throwSpeed });
+      obj.collisionFilter.mask = 0xFFFFFFFF;
+    }
+    function updateHeldObject(player, joystickAim) {
+      if (player.heldObject && !player.leftGrabConstraint && !player.rightGrabConstraint) {
+        const offsetDistance = 40;
+        let aimX = joystickAim.x, aimY = joystickAim.y;
+        if (Math.hypot(aimX, aimY) < 0.1) {
+          aimX = (player.facing === "left") ? -1 : 1;
+          aimY = 0;
+        }
+        const targetX = player.torso.position.x + aimX * offsetDistance;
+        const targetY = player.torso.position.y + aimY * offsetDistance;
+        Body.setPosition(player.heldObject, { x: targetX, y: targetY });
+      }
+    }
+    
     /* --- Melee Attack Function --- */
     function isWithinCone(origin, direction, targetPos, range, angleThreshold) {
       const vector = { x: targetPos.x - origin.x, y: targetPos.y - origin.y };
@@ -1030,6 +974,37 @@ autoGrabIfInRange(playerChar1, joystickAim1);
     }
     
     /* ================================
+       NEW: Hand Orientation & Auto-Grab
+       ================================ */
+    function updateHandOrientation(player, joystickAim) {
+      if (Math.hypot(joystickAim.x, joystickAim.y) > 0.1) {
+        let aimAngle = Math.atan2(joystickAim.y, joystickAim.x);
+        Body.setAngle(player.leftHand, aimAngle);
+        Body.setAngle(player.rightHand, aimAngle);
+      }
+    }
+    function autoGrabIfInRange(player, joystickAim) {
+      if (player.heldObject) return;
+      const reachThreshold = 50;
+      let hands = [player.leftHand, player.rightHand];
+      let bodies = Composite.allBodies(world);
+      for (let hand of hands) {
+        for (let body of bodies) {
+          if (body.isStatic || body.character || body.label === "bullet" ||
+              body.label === "leftGoal" || body.label === "rightGoal") continue;
+          if (body.label !== "enemy") continue;
+          const dx = body.position.x - hand.position.x;
+          const dy = body.position.y - hand.position.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < reachThreshold) {
+            grabStart(player, joystickAim);
+            return;
+          }
+        }
+      }
+    }
+    
+    /* ================================
        Main Update Loop
        ================================ */
     function update() {
@@ -1052,23 +1027,19 @@ autoGrabIfInRange(playerChar1, joystickAim1);
         playerChar1.facing = "right";
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: 0.01, y: 0 });
       }
-      // Jump: Apply a single impulse when Up (or W) is pressed and on ground.
       if ((keys1["ArrowUp"] || keys1["KeyW"]) && playerChar1.jumpReady && playerChar1.torso.position.y >= playAreaHeight-60) {
-        const jumpImpulse = 0.3; // adjust as desired
+        const jumpImpulse = 0.3;
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: 0, y: -jumpImpulse });
         playerChar1.jumpReady = false;
       }
       if (!(keys1["ArrowUp"] || keys1["KeyW"]) && playerChar1.torso.position.y >= playAreaHeight-60) {
         playerChar1.jumpReady = true;
       }
-      // Slingshot / Fast-Fall for Player 1:
       if (keys1["ArrowDown"] || keys1["KeyS"]) {
-        // If airborne, apply fast-fall force.
         if (playerChar1.torso.position.y < playAreaHeight-60) {
-          const fastFallForce = 0.02; // Adjust to force the character down quicker
+          const fastFallForce = 0.02;
           Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: 0, y: fastFallForce });
         } else {
-          // Otherwise (on ground), charge a slingshot impulse.
           playerChar1.slingCharge = (playerChar1.slingCharge || 0) + dt;
           const maxSlingCharge = 2.0;
           if (playerChar1.slingCharge > maxSlingCharge) playerChar1.slingCharge = maxSlingCharge;
@@ -1119,6 +1090,14 @@ autoGrabIfInRange(playerChar1, joystickAim1);
         }
       }
       
+      // --- NEW: Update Hand Orientation & Auto-Grab for Player One ---
+      updateHandOrientation(playerChar1, joystickAim1);
+      autoGrabIfInRange(playerChar1, joystickAim1);
+      
+      // --- (Optional) For Player Two, you can also update hand orientation/auto-grab.
+      // updateHandOrientation(playerChar2, joystickAim2);
+      // autoGrabIfInRange(playerChar2, joystickAim2);
+      
       // --- Update DOM Positions ---
       domEntities.forEach(body => {
         if (body.domElement) {
@@ -1145,13 +1124,11 @@ autoGrabIfInRange(playerChar1, joystickAim1);
       updateHeldObject(playerChar1, joystickAim1);
       updateHeldObject(playerChar2, joystickAim2);
       
-      // Sync head to torso.
+      // Sync heads to torso.
       Body.setPosition(playerChar1.head, { x: playerChar1.torso.position.x, y: playerChar1.torso.position.y - 40 });
       Body.setVelocity(playerChar1.head, playerChar1.torso.velocity);
       Body.setPosition(playerChar2.head, { x: playerChar2.torso.position.x, y: playerChar2.torso.position.y - 40 });
       Body.setVelocity(playerChar2.head, playerChar2.torso.velocity);
-      
-      // (Clamping players, walking animations, and HP bar updates omitted for brevity.)
       
       checkEnemyOutOfBounds();
       updateCamera();
@@ -1168,15 +1145,14 @@ autoGrabIfInRange(playerChar1, joystickAim1);
     function updateGamepadInput() {
       const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
       const threshold = 0.2;
-      for (let i=0; i<gamepads.length; i++){
+      for (let i = 0; i < gamepads.length; i++){
         const gp = gamepads[i];
         if (!gp) continue;
         if (gp.index === 0) {
           if (gp.axes[0] < -threshold) { keys1["ArrowLeft"] = true; keys1["ArrowRight"] = false; }
           else if (gp.axes[0] > threshold) { keys1["ArrowRight"] = true; keys1["ArrowLeft"] = false; }
           else { keys1["ArrowLeft"] = keys1["ArrowRight"] = false; }
-          keys1["ArrowUp"] = false; // Jump via keyboard for now.
-          // Button 7 for grab/throw.
+          keys1["ArrowUp"] = false;
           const grabPressed = gp.buttons[7].pressed;
           const wasGrabPressed = lastGamepadButtonState[gp.index] ? lastGamepadButtonState[gp.index][7] : false;
           if (grabPressed && !wasGrabPressed) { grabStart(playerChar1, joystickAim1); }
@@ -1200,68 +1176,4 @@ autoGrabIfInRange(playerChar1, joystickAim1);
           let rmag = Math.hypot(rx, ry);
           if (rmag > threshold) { joystickAim2.x = rx/rmag; joystickAim2.y = ry/rmag; }
           else { joystickAim2.x = joystickAim2.y = 0; }
-          if (!lastGamepadButtonState[gp.index]) lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
-          const meleePressed2 = (gp.buttons[2].pressed || gp.buttons[6].pressed);
-          const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
-          if (meleePressed2 && !meleeWasPressed2) { meleeAttack(playerChar2, keys2, joystickAim2); }
-          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
-        }
-      }
-    }
-    
-    /* ================================
-       Keyboard & Mouse Controls
-       ================================ */
-    document.addEventListener('keydown', e => {
-      const key = e.code;
-      if (key==='ArrowUp' || key==='KeyW') { keys1["ArrowUp"] = true; }
-      if (key==='ArrowLeft' || key==='KeyA') { keys1["ArrowLeft"] = true; }
-      if (key==='ArrowRight' || key==='KeyD') { keys1["ArrowRight"] = true; }
-      if (key==='ArrowDown' || key==='KeyS') { keys1["ArrowDown"] = true; }
-      // Spacebar triggers melee attack.
-      if (key===' ') { meleeAttack(playerChar1, keys1, joystickAim1); }
-    });
-    document.addEventListener('keyup', e => {
-      const key = e.code;
-      if (key==='ArrowUp' || key==='KeyW') { keys1["ArrowUp"] = false; }
-      if (key==='ArrowLeft' || key==='KeyA') { keys1["ArrowLeft"] = false; }
-      if (key==='ArrowRight' || key==='KeyD') { keys1["ArrowRight"] = false; }
-      if (key==='ArrowDown' || key==='KeyS') {
-        // On keyup, if on ground and charge exists, fire slingshot impulse.
-        if (playerChar1.torso.position.y >= playAreaHeight-60 && playerChar1.slingCharge && playerChar1.slingCharge > 0) {
-          const baseSlingForce = 0.05;
-          const forceMagnitude = playerChar1.slingCharge * baseSlingForce;
-          let aim = { x: joystickAim1.x, y: joystickAim1.y };
-          if (Math.hypot(aim.x, aim.y) < 0.1) { aim.x = 0; aim.y = -1; }
-          Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: aim.x * forceMagnitude, y: aim.y * forceMagnitude });
-          playerChar1.slingCharge = 0;
-        }
-        keys1["ArrowDown"] = false;
-      }
-    });
-    // Mouse: Left-click for grab/hold.
-    document.addEventListener('mousedown', e => { if(e.button===0) { grabStart(playerChar1, joystickAim1); } });
-    document.addEventListener('mouseup', e => { if(e.button===0) { grabRelease(playerChar1, keys1, joystickAim1); } });
-    document.addEventListener('mousemove', e => {
-      const rect = game.getBoundingClientRect();
-      const scale = window.currentScale || 1;
-      const mouseX = (e.clientX - rect.left)/scale + cameraX;
-      const mouseY = (e.clientY - rect.top)/scale + cameraY;
-      const dx = mouseX - playerChar1.torso.position.x;
-      const dy = mouseY - playerChar1.torso.position.y;
-      const mag = Math.hypot(dx, dy);
-      if (mag > 0) { joystickAim1.x = dx/mag; joystickAim1.y = dy/mag; }
-      else { joystickAim1.x = joystickAim1.y = 0; }
-    });
-    
-    /* ================================
-       Auto-scroll (Optional)
-       ================================ */
-    window.addEventListener("load", () => { window.scrollTo(0, document.body.scrollHeight); });
-    window.addEventListener("scroll", () => {
-      const maxScroll = document.body.scrollHeight - window.innerHeight;
-      if (window.scrollY < maxScroll) window.scrollTo(0, maxScroll);
-    });
-  </script>
-</body>
-</html>
+          if (!lastGamepadButtonState[gp.index]) lastGamepadButtonState[gp.index] = new Array(gp.buttons.l
