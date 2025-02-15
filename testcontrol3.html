@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <!-- The viewport-fit=cover tells supported browsers to use the full display area -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
-  <title>Platformer with Goals, Scoring & Dual-Hand Grab-Throw Shooting</title>
+  <title>ballbreakers – Platformer with Grab/Throw & Melee</title>
   <style>
     /* Reset & Full-Screen Setup */
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -33,8 +33,7 @@
     /* Screen – contains the game world and parallax background */
     #screen {
       position: absolute;
-      top: 0;
-      left: 0;
+      top: 0; left: 0;
       width: 100vw;
       height: 100vh;
       background: #000;
@@ -47,15 +46,14 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: url('IMG_7196.png') repeat-x;
+      background: url('background.png') repeat-x;
       background-size: auto 100%;
       z-index: 0;
     }
     /* Game World Container – camera transform applied */
     #game {
       position: absolute;
-      top: 0;
-      left: 0;
+      top: 0; left: 0;
       z-index: 1;
     }
     /* Ground styling */
@@ -64,7 +62,7 @@
       left: 0;
       background: #0d0c29;
     }
-    /* Controls */
+    /* Controls – on–screen controls will show if no gamepad is connected */
     #controls {
       position: absolute;
       left: 0;
@@ -83,6 +81,7 @@
       width: 150px;
       height: 150px;
     }
+    /* Directional buttons */
     #dpad button {
       position: absolute;
       background: #333;
@@ -122,6 +121,7 @@
       justify-content: space-around;
       align-items: flex-end;
     }
+    /* Staggered positions for buttons */
     #ab-buttons button:nth-child(1) { transform: translateY(-30px); }
     #ab-buttons button:nth-child(2) { transform: translateY(-10px); }
     #ab-buttons button:nth-child(3) { transform: translateY(-20px); }
@@ -159,14 +159,14 @@
       background: lime;
       border-radius: 3px;
     }
-    /* Player parts styling */
+    /* Player parts (circles/"bubbles") */
     .player-part {
       transform-origin: center;
       background: #fff;
       width: 20px;
       height: 20px;
       border-radius: 50%;
-      box-shadow: 0 0 14px rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 14px rgba(255,255,255,0.2);
       position: absolute;
       mask-image: url('mask.png');
       mask-size: cover;
@@ -198,9 +198,7 @@
       border-radius: 8px;
       clip-path: polygon(10% 0%, 90% 0%, 100% 50%, 90% 100%, 10% 100%, 0% 50%);
     }
-    .boulder {
-      transform: translate(-50%, -50%);
-    }
+    .boulder { transform: translate(-50%, -50%); }
     .head {
       width: 500px;
       height: 500px;
@@ -224,13 +222,13 @@
     .head .eye.left { left: 30%; top: 30%; }
     .head .eye.right { right: 30%; top: 30%; }
     .enemy {
-      background: red;
+      background: black;
       border: 2px solid black;
       border-radius: 50%;
     }
     .goal {
       position: absolute;
-      background: rgba(0, 0, 255, 0.3);
+      background: rgba(0,0,255,0.3);
       border: 2px dashed #00f;
     }
     @keyframes flashAnimation {
@@ -239,12 +237,12 @@
     }
     .flash { animation: flashAnimation 0.5s ease-out; }
     @keyframes shakeAnimation {
-      0% { transform: translate(0px, 0px); }
-      20% { transform: translate(-5px, 5px); }
-      40% { transform: translate(-5px, -5px); }
-      60% { transform: translate(5px, 5px); }
-      80% { transform: translate(5px, -5px); }
-      100% { transform: translate(0px, 0px); }
+      0% { transform: translate(0,0); }
+      20% { transform: translate(-5px,5px); }
+      40% { transform: translate(-5px,-5px); }
+      60% { transform: translate(5px,5px); }
+      80% { transform: translate(5px,-5px); }
+      100% { transform: translate(0,0); }
     }
     .shake { animation: shakeAnimation 0.5s ease; }
     @keyframes goalTextAnimationKeyframes {
@@ -257,10 +255,10 @@
       position: absolute;
       width: 150px;
       height: 100px;
-      background: rgba(13, 12, 41, 0.7);
-      border: 2px solid rgba(153, 153, 153, 0.8);
+      background: rgba(13,12,41,0.7);
+      border: 2px solid rgba(153,153,153,0.8);
       border-radius: 4px;
-      box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 15px rgba(255,255,255,0.2);
       overflow: hidden;
       animation: tvRandomize 4s infinite alternate;
     }
@@ -271,7 +269,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.5), transparent 60%);
+      background: radial-gradient(circle at top left, rgba(255,255,255,0.5), transparent 60%);
       pointer-events: none;
     }
     .tv::after {
@@ -281,7 +279,7 @@
       left: -50%;
       width: 200%;
       height: 200%;
-      background: linear-gradient(45deg, rgba(255, 255, 255, 0.2) 25%, rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, 0.2) 75%);
+      background: linear-gradient(45deg, rgba(255,255,255,0.2) 25%, rgba(255,255,255,0) 40%, rgba(255,255,255,0.2) 75%);
       transform: rotate(45deg);
       opacity: 0.5;
       pointer-events: none;
@@ -309,10 +307,9 @@
       text-align: center;
       box-shadow: 0 0 20px 10px rgba(255,255,200,0.9);
     }
-    .goal-wall {
-      background: #0d0c29;
-    }
-    /* --- Player-Specific CSS Overrides --- */
+    .goal-wall { background: #0d0c29; }
+    
+    /* --- NEW: Player-Specific Overrides (CSS Only) --- */
     .player-part.player1::after {
       background: url('overlay5.gif') center/cover no-repeat;
     }
@@ -339,7 +336,16 @@
       -webkit-mask-repeat: no-repeat;
       -webkit-mask-position: center;
     }
-    /* Booster Pixel Animation for Jump */
+    .enemy-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: url('overlay9.gif') center/cover no-repeat;
+      pointer-events: none;
+    }
     .booster-pixel {
       position: absolute;
       width: 4px;
@@ -348,26 +354,26 @@
       image-rendering: pixelated;
       pointer-events: none;
       z-index: 20;
-      animation: rocketBoost 600ms cubic-bezier(0.2, 1, 0.3, 1) forwards;
+      animation: rocketBoost 600ms cubic-bezier(0.2,1,0.3,1) forwards;
     }
     @keyframes rocketBoost {
       0% {
-        transform: translate(0, 0) scale(1) rotate(0deg);
+        transform: translate(0,0) scale(1) rotate(0deg);
         opacity: 1;
         filter: drop-shadow(0 0 2px #FF8C00);
       }
       20% {
-        transform: translate(calc(var(--dx, 0) * 0.3px), calc(var(--dy, 0) * 0.3px)) scale(1.1) rotate(calc(var(--rotation, 0) * 1deg));
+        transform: translate(calc(var(--dx,0)*0.3px),calc(var(--dy,0)*0.3px)) scale(1.1) rotate(calc(var(--rotation,0)*1deg));
         opacity: 0.9;
         filter: drop-shadow(0 0 2px #FFA500);
       }
       50% {
-        transform: translate(calc(var(--dx, 0) * 0.7px), calc(var(--dy, 0) * 0.7px)) scale(0.8) rotate(calc(var(--rotation, 0) * 1deg));
+        transform: translate(calc(var(--dx,0)*0.7px),calc(var(--dy,0)*0.7px)) scale(0.8) rotate(calc(var(--rotation,0)*1deg));
         opacity: 0.6;
         filter: drop-shadow(0 0 1px #FF4500);
       }
       100% {
-        transform: translate(calc(var(--dx, 0) * 1px), calc(var(--dy, 0) * 1px)) scale(0.5) rotate(calc(var(--rotation, 0) * 1deg));
+        transform: translate(calc(var(--dx,0)*1px),calc(var(--dy,0)*1px)) scale(0.5) rotate(calc(var(--rotation,0)*1deg));
         opacity: 0;
         filter: drop-shadow(0 0 1px #FF4500);
       }
@@ -394,11 +400,11 @@
         <div id="joystick"></div>
       </div>
       <div id="ab-buttons">
-        <!-- For player one: The A button (on-screen) will now perform grab/hold -->
+        <!-- For player one: on–screen button A will be used for grab/hold (mouse click does the same) -->
         <button class="A"></button>
-        <!-- The B button remains for (if desired) additional functions -->
+        <!-- B button reserved (if needed) -->
         <button class="B"></button>
-        <!-- The C button (or Spacebar) now triggers melee -->
+        <!-- C button and Spacebar trigger melee attack -->
         <button class="C"></button>
       </div>
     </div>
@@ -407,26 +413,75 @@
   <!-- Matter.js Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <script>
-    // Matter.js Modules
-    const { Engine, World, Bodies, Body, Constraint, Events, Composites, Composite } = Matter;
-
+    // ================================
+    // Global Camera Variables & updateCamera
+    // ================================
+    let cameraX = 0, cameraY = 0;
+    function updateCamera() {
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+      
+      let points = [
+        playerChar1.torso.position,
+        playerChar2.torso.position
+      ];
+      if (enemies.length > 0) {
+        points.push(enemies[0].body.position);
+      }
+      
+      let sumX = 0, sumY = 0;
+      points.forEach(p => {
+        sumX += p.x;
+        sumY += p.y;
+      });
+      const centerX = sumX / points.length;
+      const centerY = sumY / points.length;
+      
+      const margin = 100;
+      let minX = Math.min(...points.map(p => p.x)) - margin;
+      let maxX = Math.max(...points.map(p => p.x)) + margin;
+      let minY = Math.min(...points.map(p => p.y)) - margin;
+      let maxY = Math.max(...points.map(p => p.y)) + margin;
+      
+      const boxWidth = maxX - minX;
+      const boxHeight = maxY - minY;
+      
+      const scaleX = screenWidth / boxWidth;
+      const scaleY = screenHeight / boxHeight;
+      let scale = Math.min(scaleX, scaleY, 1);
+      window.currentScale = scale;
+      
+      let camX = centerX - screenWidth / (2 * scale);
+      let camY = centerY - screenHeight / (2 * scale);
+      
+      camX = Math.max(0, Math.min(camX, levelWidth - screenWidth / scale));
+      camY = Math.max(0, Math.min(camY, gameHeight - screenHeight / scale));
+      
+      cameraX = camX;
+      cameraY = camY;
+      
+      game.style.transformOrigin = "top left";
+      game.style.transform = `translate(-${cameraX}px, -${cameraY}px) scale(${scale})`;
+      document.getElementById("parallax").style.backgroundPosition = (-cameraX * 0.5) + "px 0";
+    }
+    
+    // ================================
     // Global Variables & Setup
+    // ================================
+    const { Engine, World, Bodies, Body, Constraint, Events, Composites, Composite } = Matter;
     const game = document.getElementById("game");
     let engine = Engine.create();
-    engine.world.gravity.y = 5; // Weightier gravity
+    engine.world.gravity.y = 3.2;
     const world = engine.world;
     let tvs = [];
     let domEntities = [], platforms = [], walls = [], coins = [], bullets = [], enemies = [];
     let leftScore = 0, rightScore = 0;
-
-    // Player input objects (player one uses keyboard & mouse; player two primarily via gamepad)
     let keys1 = {}, keys2 = {};
     let joystickAim1 = { x: 0, y: 0 }, joystickAim2 = { x: 0, y: 0 };
     let walkCycle1 = 0, walkCycle2 = 0;
     let lastTime = Date.now();
     
-    // Level dimensions
-    const levelWidth = 3000;
+    const levelWidth = 1920;
     function getViewportHeight() {
       return window.visualViewport ? window.visualViewport.height : window.innerHeight;
     }
@@ -435,16 +490,14 @@
     const groundExtraHeight = 100;
     game.style.width = levelWidth + "px";
     game.style.height = gameHeight + "px";
-
-    // Create ground element
+    
     const groundEl = document.createElement("div");
     groundEl.id = "ground";
     groundEl.style.top = (playAreaHeight - 20) + "px";
-    groundEl.style.width = levelWidth + "px";
+    groundEl.style.width = (levelWidth + 40) + "px";
     groundEl.style.height = groundExtraHeight + "px";
     game.appendChild(groundEl);
-
-    // Helper: Create DOM element for a Matter body
+    
     function createDomElement(body, cls, w, h) {
       const el = document.createElement("div");
       el.className = "entity " + cls;
@@ -454,7 +507,7 @@
       body.domElement = el;
       domEntities.push(body);
     }
-
+    
     /* --- Damage and Break Functions --- */
     function particleBurst(x, y, color) {
       for (let i = 0; i < 10; i++) {
@@ -513,7 +566,7 @@
         }
       }
     }
-
+    
     /* --- Platforms / Boulders --- */
     function createPlatform(x, y, width, height) {
       const slope = Math.random() * 0.4 + 0.3;
@@ -536,38 +589,48 @@
       boulder.domElement = el;
       platforms.push(boulder);
     }
-
+    
     /* --- Walls (Stalactites/Stalagmites) --- */
     function createWall(x, y, width, height) {
       let body, el;
-      if (y < playAreaHeight/2) {
-        const vertices = [{ x: -width/2, y: 0 }, { x: width/2, y: 0 }, { x: 0, y: height }];
-        body = Bodies.fromVertices(x + width/2, height/3, [vertices], { isStatic: true, label: "wall" }, true);
+      if (y < playAreaHeight / 2) {
+        const vertices = [
+          { x: -width/2, y: 0 },
+          { x: width/2,  y: 0 },
+          { x: 0,        y: height }
+        ];
+        body = Bodies.fromVertices(x + width/2, height / 3, [vertices], { isStatic: true, label: "wall" }, true);
         body.width = width;
         body.height = height;
         body.hp = 100;
         World.add(world, body);
+    
         el = document.createElement("div");
         el.className = "stalactite";
         el.style.width = width + "px";
         el.style.height = height + "px";
         el.style.left = (x + width/2) + "px";
-        el.style.top = (height/3) + "px";
+        el.style.top = "0px"; 
         el.style.backgroundColor = "#0d0c29";
         el.style.clipPath = "polygon(50% 100%, 0% 0%, 100% 0%)";
       } else {
-        const vertices = [{ x: -width/2, y: 0 }, { x: width/2, y: 0 }, { x: 0, y: -height }];
-        body = Bodies.fromVertices(x + width/2, playAreaHeight - height/3, [vertices], { isStatic: true, label: "wall" }, true);
+        const vertices = [
+          { x: -width/2, y: height },
+          { x: width/2,  y: height },
+          { x: 0,        y: 0 }
+        ];
+        body = Bodies.fromVertices(x + width/2, playAreaHeight - (2 * height) / 3, [vertices], { isStatic: true, label: "wall" }, true);
         body.width = width;
         body.height = height;
         body.hp = 100;
         World.add(world, body);
+    
         el = document.createElement("div");
         el.className = "stalagmite";
         el.style.width = width + "px";
         el.style.height = height + "px";
         el.style.left = (x + width/2) + "px";
-        el.style.top = (playAreaHeight - height/3) + "px";
+        el.style.top = (playAreaHeight - height) + "px";
         el.style.backgroundColor = "#0d0c29";
         el.style.clipPath = "polygon(50% 0%, 0% 100%, 100% 100%)";
       }
@@ -576,8 +639,7 @@
       walls.push(body);
       return body;
     }
-
-    // Spawn platforms and walls for testing
+    
     for (let i = 0; i < 2; i++) {
       const width = Math.floor(Math.random() * 101) + 200;
       const x = Math.random() * (levelWidth - width);
@@ -589,17 +651,15 @@
       const x = Math.random() * (levelWidth - width);
       createWall(x, 100, width, 200);
     }
-
-    // Static boundaries & safety floor
-    const groundBody = Bodies.rectangle(levelWidth / 2, playAreaHeight, levelWidth, 40, { isStatic: true });
+    
+    const groundBody = Bodies.rectangle(levelWidth / 2, playAreaHeight, levelWidth + 40, 40, { isStatic: true });
     const leftBoundary = Bodies.rectangle(0, playAreaHeight / 2, 40, playAreaHeight, { isStatic: true });
     const rightBoundary = Bodies.rectangle(levelWidth, playAreaHeight / 2, 40, playAreaHeight, { isStatic: true });
     World.add(world, [groundBody, leftBoundary, rightBoundary]);
     const safetyFloorY = playAreaHeight + 50;
     const safetyFloor = Bodies.rectangle(levelWidth / 2, safetyFloorY, levelWidth, 40, { isStatic: true, label: "safetyFloor" });
     World.add(world, safetyFloor);
-
-    // Create Goal Sensors
+    
     const goalWidth = 20, goalHeight = 200;
     const leftGoal = Bodies.rectangle(50, playAreaHeight/2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "leftGoal" });
     const rightGoal = Bodies.rectangle(levelWidth - 50, playAreaHeight/2, goalWidth, goalHeight, { isStatic: true, isSensor: true, label: "rightGoal" });
@@ -616,8 +676,7 @@
     }
     createGoalDom(leftGoal, "left");
     createGoalDom(rightGoal, "right");
-
-    // Create non-passable walls behind each goal
+    
     const wallThickness = 50;
     const fullHeight = playAreaHeight + 2;
     const wallCenterY = fullHeight / 2;
@@ -652,8 +711,7 @@
     }
     createWallDom(leftGoalWall, "left");
     createWallDom(rightGoalWall, "right");
-
-    // --- Tentacle Helpers ---
+    
     function createTentacleComposite(x, y, segments, segmentLength, segmentRadius) {
       const tentacle = Composites.stack(x, y, segments, 1, 0, 0, function(x, y) {
         return Bodies.circle(x, y, segmentRadius, { collisionFilter: { group: -1 }, frictionAir: 0.1 });
@@ -679,18 +737,16 @@
       Composite.add(world, [tentacle, constraint]);
       return tentacle;
     }
-
-    // --- Character Factory (Player) ---
+    
     function createCharacter(x, y) {
       const char = { hp: 100, alive: true, spawn: { x, y }, heldObject: null, isDying: false };
       char.facing = "right";
-      // Jump properties for a springy multi-frame impulse
       char.jumpReady = true;
       char.jumpCounter = 0;
       const size = 20;
       const torsoOptions = { friction: 6.0, frictionAir: 0.11, restitution: 0 };
       const defaultOptions = { friction: 0.5, frictionAir: 0.01, restitution: 0 };
-
+    
       const hpContainer = document.createElement("div");
       hpContainer.className = "hp-bar-container";
       const hpBar = document.createElement("div");
@@ -699,7 +755,7 @@
       game.appendChild(hpContainer);
       char.hpContainer = hpContainer;
       char.hpBar = hpBar;
-
+    
       function addPart(body, cls, w, h) {
         createDomElement(body, cls, w, h);
         body.character = char;
@@ -714,7 +770,7 @@
         }
         return body;
       }
-
+    
       const head = Bodies.circle(x, y - 40, size / 2, defaultOptions);
       addPart(head, "player-part head", size, size);
       const torso = Bodies.circle(x, y - 20, size, torsoOptions);
@@ -735,9 +791,9 @@
       addPart(leftUpperLeg, "player-part leg", size, size);
       const leftFoot = Bodies.circle(x - 10, y + 30, size / 2, defaultOptions);
       addPart(leftFoot, "player-part foot", size, size);
-
+    
       World.add(world, [head, torso, rightUpperArm, rightHand, leftUpperArm, leftHand, rightUpperLeg, rightFoot, leftUpperLeg, leftFoot]);
-
+    
       function link(a, b, offA, offB) {
         const con = Constraint.create({
           bodyA: a, pointA: offA, bodyB: b, pointB: offB,
@@ -754,7 +810,7 @@
       link(rightUpperLeg, rightFoot, { x: 0, y: 0 }, { x: 0, y: -20 });
       link(torso, leftUpperLeg, { x: -10, y: size }, { x: 0, y: -size/2 });
       link(leftUpperLeg, leftFoot, { x: 0, y: 0 }, { x: 0, y: -20 });
-
+    
       char.head = head;
       char.torso = torso;
       char.rightUpperArm = rightUpperArm;
@@ -765,15 +821,12 @@
       char.rightFoot = rightFoot;
       char.leftUpperLeg = leftUpperLeg;
       char.leftFoot = leftFoot;
-
+    
       return char;
     }
-
-    // Create two players
     let playerChar1 = createCharacter(100, playAreaHeight / 2);
     let playerChar2 = createCharacter(levelWidth - 100, playAreaHeight / 2);
-
-    // --- Add extra CSS classes for distinct styling ---
+    
     function addPlayerClass(player, className) {
       let parts = [player.head, player.torso, player.rightUpperArm, player.rightHand,
                    player.leftUpperArm, player.leftHand, player.rightUpperLeg, player.rightFoot,
@@ -786,8 +839,7 @@
     }
     addPlayerClass(playerChar1, "player1");
     addPlayerClass(playerChar2, "player2");
-
-    // --- Enhanced Enemy Implementation ---
+    
     function createEnemy(x, y) {
       let enemy = {
         hp: 50,
@@ -795,16 +847,19 @@
         state: "patrol",
         direction: Math.random() < 0.5 ? -1 : 1
       };
-      enemy.body = Bodies.circle(x, y, 20, {
-        friction: 0.5,
-        frictionAir: 0.05,
-        restitution: 0.9,
+      enemy.body = Bodies.circle(x, y, 20, { 
+        friction: 0.5, 
+        frictionAir: 0.05, 
+        restitution: 1.0,
         label: "enemy",
         isBullet: true
       });
       createDomElement(enemy.body, "enemy", 40, 40);
       World.add(world, enemy.body);
-
+      const overlay = document.createElement("div");
+      overlay.classList.add("enemy-overlay");
+      enemy.body.domElement.appendChild(overlay);
+      
       enemy.update = function() {
         const dx1 = playerChar1.torso.position.x - enemy.body.position.x;
         const dy1 = playerChar1.torso.position.y - enemy.body.position.y;
@@ -840,8 +895,8 @@
       return enemy;
     }
     createEnemy(levelWidth / 2, playAreaHeight / 2);
-
-    // --- Grab & Throw Logic ---
+    
+    // --- Grab & Throw Functions ---
     function grabStart(player, joystickAim) {
       if (!player.heldObject) {
         const grabRange = 1000;
@@ -878,27 +933,29 @@
           if (keys["ArrowRight"]) dx =  1;
           if (dx === 0 && dy === 0) dx = (player.facing === "left") ? -1 : 1;
           let mag = Math.hypot(dx, dy);
-          dx /= mag; dy /= mag;
+          dx /= mag;
+          dy /= mag;
         }
         const throwSpeed = 55;
-        const groundLevel = playAreaHeight - 20;
-        if (obj.label === "enemy" && obj.position.y > groundLevel) {
-          Body.setPosition(obj, { x: obj.position.x, y: groundLevel });
-        }
         Body.setVelocity(obj, { x: dx * throwSpeed, y: dy * throwSpeed });
-        Body.setAngularVelocity(obj, 0.5);
         obj.collisionFilter.mask = 0xFFFFFFFF;
         player.heldObject = null;
       }
     }
-    function updateHeldObject(player) {
+    function updateHeldObject(player, joystickAim) {
       if (player.heldObject) {
-        let handPos = (player.facing === "left") ? player.leftHand.position : player.rightHand.position;
-        Body.setPosition(player.heldObject, handPos);
+        const offsetDistance = 40;
+        let aimX = joystickAim.x, aimY = joystickAim.y;
+        if (Math.hypot(aimX, aimY) < 0.1) {
+          aimX = (player.facing === "left") ? -1 : 1;
+          aimY = 0;
+        }
+        const targetX = player.torso.position.x + aimX * offsetDistance;
+        const targetY = player.torso.position.y + aimY * offsetDistance;
+        Body.setPosition(player.heldObject, { x: targetX, y: targetY });
       }
     }
-
-    // --- Core Melee Attack Function ---
+    
     function isWithinCone(origin, direction, targetPos, range, angleThreshold) {
       const vector = { x: targetPos.x - origin.x, y: targetPos.y - origin.y };
       const distance = Math.hypot(vector.x, vector.y);
@@ -909,6 +966,7 @@
       if (diff > Math.PI) diff = 2 * Math.PI - diff;
       return diff <= angleThreshold;
     }
+    
     function meleeAttack(player, keys, joystickAim) {
       let inputDir = { x: 0, y: 0 };
       if (keys["ArrowLeft"])  inputDir.x -= 1;
@@ -964,67 +1022,173 @@
         triggerScreenshake();
       }
     }
-
-    // --- KO/Death Effect & Screenshake Functions ---
-    function triggerDeathEffect() {
-      let existingOverlay = document.getElementById("deathOverlay");
-      if (existingOverlay) {
-        existingOverlay.parentNode.removeChild(existingOverlay);
+    
+    function digitalPixelExplosion(x, y) {
+      triggerScreenshake();     
+      const numPixels = 50;
+      for (let i = 0; i < numPixels; i++) {
+        const pixel = document.createElement("div");
+        pixel.style.position = "absolute";
+        pixel.style.left = x + "px";
+        pixel.style.top = y + "px";
+        pixel.style.width = "4px";
+        pixel.style.height = "4px";
+        pixel.style.background = "#FFF";
+        pixel.style.border = "1px solid #000";
+        pixel.style.pointerEvents = "none";
+        pixel.style.opacity = "1";
+        game.appendChild(pixel);
+        const angle = Math.random() * 2 * Math.PI;
+        const distance = Math.random() * 50 + 20;
+        const deltaX = Math.cos(angle) * distance;
+        const deltaY = Math.sin(angle) * distance;
+        pixel.animate([
+          { transform: "translate(0,0)", opacity: 1 },
+          { transform: `translate(${deltaX}px, ${deltaY}px)`, opacity: 0 }
+        ], {
+          duration: 1000,
+          easing: "ease-out",
+          fill: "forwards"
+        });
+        setTimeout(() => { if (pixel.parentNode) pixel.parentNode.removeChild(pixel); }, 1000);
       }
-      const deathOverlay = document.createElement("div");
-      deathOverlay.id = "deathOverlay";
-      deathOverlay.style.position = "absolute";
-      deathOverlay.style.top = "0";
-      deathOverlay.style.left = "0";
-      deathOverlay.style.width = "100%";
-      deathOverlay.style.height = "100%";
-      deathOverlay.style.zIndex = "50";
-      deathOverlay.style.pointerEvents = "none";
-      deathOverlay.style.backgroundColor = "rgba(255, 0, 0, 0.8)";
-      deathOverlay.style.transition = "background-color 0.5s ease-out";
-      game.appendChild(deathOverlay);
-      setTimeout(() => { deathOverlay.style.backgroundColor = "rgba(255, 0, 0, 0)"; }, 50);
-      setTimeout(() => { if (deathOverlay.parentNode) deathOverlay.parentNode.removeChild(deathOverlay); }, 600);
-      const koText = document.createElement("div");
-      koText.id = "koText";
-      koText.innerText = "KO";
-      koText.style.position = "absolute";
-      koText.style.top = "50%";
-      koText.style.left = "50%";
-      koText.style.transform = "translate(-50%, -50%)";
-      koText.style.fontSize = "72px";
-      koText.style.fontWeight = "bold";
-      koText.style.fontFamily = '"Impact", "Arial Black", sans-serif';
-      koText.style.color = "red";
-      koText.style.zIndex = "60";
-      koText.style.pointerEvents = "none";
-      game.appendChild(koText);
-      koText.animate([
-        { opacity: 1, transform: "translate(-50%, -50%) scale(1.5)" },
-        { opacity: 0, transform: "translate(-50%, -50%) scale(1)" }
-      ], { duration: 1000, easing: "ease-out", fill: "forwards" });
-      setTimeout(() => { if (koText.parentNode) koText.parentNode.removeChild(koText); }, 1000);
     }
+    
+    let coinCount = 0;
+    function collectCoin(coin) {
+      coinCount++;
+      spawnSpark(coin.position.x, coin.position.y);
+      World.remove(world, coin);
+      coins = coins.filter(c => c !== coin);
+      if (coin.domElement && coin.domElement.parentNode) {
+        coin.domElement.parentNode.removeChild(coin.domElement);
+      }
+      console.log("Coin collected! Total:", coinCount);
+    }
+    Events.on(engine, "collisionStart", function(event) {
+      event.pairs.forEach(pair => {
+        let bullet = null, target = null;
+        if (pair.bodyA.label === "bullet") { bullet = pair.bodyA; target = pair.bodyB; }
+        else if (pair.bodyB.label === "bullet") { bullet = pair.bodyB; target = pair.bodyA; }
+        if (!bullet || !target) return;
+        const destructibleLabels = ["platform", "wall", "wallChunk", "enemy"];
+        if (destructibleLabels.includes(target.label)) {
+          damageDestructible(target, 30);
+          if (target.label === "enemy") {
+            let dx = target.position.x - bullet.position.x;
+            let dy = target.position.y - bullet.position.y;
+            let mag = Math.hypot(dx, dy);
+            if (mag > 0) { dx /= mag; dy /= mag; }
+            const knockbackForce = 0.05;
+            Body.applyForce(target, target.position, { x: dx * knockbackForce, y: dy * knockbackForce });
+          }
+        } else if (target.character && target.character !== bullet.owner) {
+          damageDestructible(target, 30);
+        }
+        World.remove(world, bullet);
+        if (bullet.domElement && bullet.domElement.parentNode) { bullet.domElement.parentNode.removeChild(bullet.domElement); }
+      });
+    });
+    Events.on(engine, "collisionStart", function(event) {
+      event.pairs.forEach(pair => {
+        if (pair.bodyA.label === "tv" && pair.bodyB.character) { breakTV(pair.bodyA); }
+        else if (pair.bodyB.label === "tv" && pair.bodyA.character) { breakTV(pair.bodyB); }
+      });
+    });
+    Events.on(engine, "collisionStart", function(event) {
+      event.pairs.forEach(pair => {
+        if (pair.bodyA.label === "coin" && pair.bodyB.character) { collectCoin(pair.bodyA); }
+        else if (pair.bodyB.label === "coin" && pair.bodyA.character) { collectCoin(pair.bodyB); }
+      });
+    });
+    function updateScoreboard() {
+      document.getElementById("leftScore").textContent = leftScore;
+      document.getElementById("rightScore").textContent = rightScore;
+    }
+    function removeEnemy(enemyBody) {
+      World.remove(world, enemyBody);
+      if (enemyBody.domElement && enemyBody.domElement.parentNode) {
+        enemyBody.domElement.parentNode.removeChild(enemyBody.domElement);
+      }
+      enemies = enemies.filter(e => e.body !== enemyBody);
+    }
+    Events.on(engine, "collisionStart", function(event) {
+      event.pairs.forEach(pair => {
+        if (pair.bodyA.label === "leftGoal" && pair.bodyB.label === "enemy") {
+          leftScore++;
+          removeEnemy(pair.bodyB);
+          updateScoreboard();
+          triggerGoalEffect();
+          setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
+        } else if (pair.bodyB.label === "leftGoal" && pair.bodyA.label === "enemy") {
+          leftScore++;
+          removeEnemy(pair.bodyA);
+          updateScoreboard();
+          triggerGoalEffect();
+          setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
+        } else if (pair.bodyA.label === "rightGoal" && pair.bodyB.label === "enemy") {
+          rightScore++;
+          removeEnemy(pair.bodyB);
+          updateScoreboard();
+          triggerGoalEffect();
+          setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
+        } else if (pair.bodyB.label === "rightGoal" && pair.bodyA.label === "enemy") {
+          rightScore++;
+          removeEnemy(pair.bodyA);
+          updateScoreboard();
+          triggerGoalEffect();
+          setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
+        }
+      });
+    });
+    function triggerGoalEffect() {
+      let flash = document.getElementById("flashOverlay");
+      if (!flash) {
+        flash = document.createElement("div");
+        flash.id = "flashOverlay";
+        flash.style.position = "absolute";
+        flash.style.top = "0";
+        flash.style.left = "0";
+        flash.style.width = "100%";
+        flash.style.height = "100%";
+        flash.style.zIndex = "50";
+        flash.style.pointerEvents = "none";
+        game.appendChild(flash);
+      }
+      flash.classList.remove("flash");
+      void flash.offsetWidth;
+      flash.classList.add("flash");
+    
+      let screenEl = document.getElementById("screen");
+      screenEl.classList.remove("shake");
+      void screenEl.offsetWidth;
+      screenEl.classList.add("shake");
+    
+      let goalText = document.createElement("div");
+      goalText.id = "goalText";
+      goalText.innerText = "GOAL!";
+      goalText.style.position = "absolute";
+      goalText.style.top = "50%";
+      goalText.style.left = "50%";
+      goalText.style.transform = "translate(-50%, -50%)";
+      goalText.style.fontSize = "72px";
+      goalText.style.fontWeight = "bold";
+      goalText.style.fontFamily = '"Impact", "Arial Black", sans-serif';
+      goalText.style.color = "white";
+      goalText.style.zIndex = "60";
+      goalText.style.pointerEvents = "none";
+      game.appendChild(goalText);
+      goalText.classList.add("goalTextAnimation");
+      setTimeout(() => { if (goalText.parentNode) { goalText.parentNode.removeChild(goalText); } }, 1000);
+    }
+    
     function triggerScreenshake() {
       const screenEl = document.getElementById("screen");
       screenEl.classList.remove("shake");
       void screenEl.offsetWidth;
       screenEl.classList.add("shake");
     }
-    function checkEnemyOutOfBounds() {
-      enemies.slice().forEach(enemy => {
-        const pos = enemy.body.position;
-        const outHorizontally = pos.x < 0 || pos.x > levelWidth;
-        const outBelowSafety = pos.y > safetyFloorY;
-        const groundCenter = (playAreaHeight - 20) + (groundExtraHeight / 2);
-        const groundPenetration = pos.y > groundCenter && enemy.body.speed > 3;
-        if (outHorizontally || outBelowSafety || groundPenetration) {
-          triggerOutEffect();
-          removeEnemy(enemy.body);
-          setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
-        }
-      });
-    }
+    
     function triggerOutEffect() {
       const outText = document.createElement("div");
       outText.id = "outText";
@@ -1040,17 +1204,33 @@
       outText.style.zIndex = "60";
       outText.style.pointerEvents = "none";
       game.appendChild(outText);
-      
       const screenEl = document.getElementById("screen");
       screenEl.classList.remove("shake");
       void screenEl.offsetWidth;
       screenEl.classList.add("shake");
-      
       outText.classList.add("goalTextAnimation");
-      setTimeout(() => { if (outText.parentNode) outText.parentNode.removeChild(outText); }, 1000);
+      setTimeout(() => {
+        if (outText.parentNode) {
+          outText.parentNode.removeChild(outText);
+        }
+      }, 1000);
     }
-
-    // --- Auto Respawn Helper ---
+    
+    function checkEnemyOutOfBounds() {
+      enemies.slice().forEach(enemy => {
+        const pos = enemy.body.position;
+        const outHorizontally = pos.x < 0 || pos.x > levelWidth;
+        const outBelowSafety = pos.y > safetyFloorY;
+        const groundCenter = (playAreaHeight - 20) + (groundExtraHeight / 2);
+        const groundPenetration = pos.y > groundCenter && enemy.body.speed > 3;
+        if (outHorizontally || outBelowSafety || groundPenetration) {
+          triggerOutEffect();
+          removeEnemy(enemy.body);
+          setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
+        }
+      });
+    }
+    
     function respawnPlayer(player) {
       const parts = [player.head, player.torso, player.rightUpperArm, player.rightHand, player.leftUpperArm, player.leftHand, player.rightUpperLeg, player.rightFoot, player.leftUpperLeg, player.leftFoot];
       parts.forEach(part => {
@@ -1063,54 +1243,29 @@
         player.hpContainer.parentNode.removeChild(player.hpContainer);
       }
     }
-
-    // --- Dynamic Camera with Zoom ---
-    let cameraX = 0, cameraY = 0;
-    function updateCamera() {
-      const screenWidth = window.innerWidth;
-      const screenHeight = window.innerHeight;
-      
-      let points = [
-        playerChar1.torso.position,
-        playerChar2.torso.position
-      ];
-      if (enemies.length > 0) {
-        points.push(enemies[0].body.position);
+    
+    function createRocketBoosterEffect(player) {
+      const offsetX = player.facing === "right" ? -15 : 15;
+      const origin = {
+        x: player.torso.position.x + offsetX,
+        y: player.torso.position.y
+      };
+      const numPixels = 12;
+      for (let i = 0; i < numPixels; i++) {
+        const pixel = document.createElement("div");
+        pixel.className = "booster-pixel";
+        pixel.style.left = origin.x + "px";
+        pixel.style.top = origin.y + "px";
+        const dx = Math.random() * 20 - 10;
+        const dy = Math.random() * 20;
+        pixel.style.setProperty("--dx", dx);
+        pixel.style.setProperty("--dy", dy);
+        pixel.style.setProperty("--rotation", Math.random() * 360);
+        game.appendChild(pixel);
+        setTimeout(() => pixel.remove(), 600);
       }
-      
-      let sumX = 0, sumY = 0;
-      points.forEach(p => { sumX += p.x; sumY += p.y; });
-      const centerX = sumX / points.length;
-      const centerY = sumY / points.length;
-      
-      const margin = 100;
-      let minX = Math.min(...points.map(p => p.x)) - margin;
-      let maxX = Math.max(...points.map(p => p.x)) + margin;
-      let minY = Math.min(...points.map(p => p.y)) - margin;
-      let maxY = Math.max(...points.map(p => p.y)) + margin;
-      
-      const boxWidth = maxX - minX;
-      const boxHeight = maxY - minY;
-      
-      const scaleX = screenWidth / boxWidth;
-      const scaleY = screenHeight / boxHeight;
-      let scale = Math.min(scaleX, scaleY, 1);
-      
-      let camX = centerX - screenWidth / (2 * scale);
-      let camY = centerY - screenHeight / (2 * scale);
-      
-      camX = Math.max(0, Math.min(camX, levelWidth - screenWidth / scale));
-      camY = Math.max(0, Math.min(camY, gameHeight - screenHeight / scale));
-      
-      cameraX = camX;
-      cameraY = camY;
-      
-      game.style.transformOrigin = "top left";
-      game.style.transform = `translate(-${cameraX}px, -${cameraY}px) scale(${scale})`;
-      document.getElementById("parallax").style.backgroundPosition = (-cameraX * 0.5) + "px 0";
     }
-
-    // --- Main Game Loop ---
+    
     function update() {
       const now = Date.now();
       let dt = (now - lastTime) / 1000;
@@ -1118,12 +1273,11 @@
       
       updateGamepadInput();
       Engine.update(engine, 1000/60);
-      
       engine.positionIterations = 10;
       engine.velocityIterations = 10;
       engine.constraintIterations = 4;
-
-      // ----- PLAYER ONE MOVEMENT -----
+    
+      // --- Player One Movement & Jumping ---
       if (keys1["ArrowLeft"]) {
         playerChar1.facing = "left";
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: -0.01, y: 0 });
@@ -1132,9 +1286,8 @@
         playerChar1.facing = "right";
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: 0.01, y: 0 });
       }
-      // --- Jump for Player One (triggered only by Up arrow or W) ---
-      if ((keys1["ArrowUp"] || keys1["KeyW"]) &&
-          playerChar1.jumpReady &&
+      // Jump for player one is triggered only by Up arrow or W
+      if ((keys1["ArrowUp"] || keys1["KeyW"]) && playerChar1.jumpReady &&
           playerChar1.torso.position.y >= playAreaHeight - 60) {
         playerChar1.jumpCounter = 10;
         playerChar1.jumpReady = false;
@@ -1152,12 +1305,11 @@
         });
         playerChar1.jumpCounter--;
       }
-      if (!(keys1["ArrowUp"] || keys1["KeyW"]) &&
-           playerChar1.torso.position.y >= playAreaHeight - 60) {
+      if (!(keys1["ArrowUp"] || keys1["KeyW"]) && playerChar1.torso.position.y >= playAreaHeight - 60) {
         playerChar1.jumpReady = true;
       }
-
-      // ----- PLAYER TWO MOVEMENT -----
+    
+      // --- Player Two Movement & Jumping (controlled by gamepad/keyboard) ---
       if (keys2["ArrowLeft"]) {
         playerChar2.facing = "left";
         Body.applyForce(playerChar2.torso, playerChar2.torso.position, { x: -0.01, y: 0 });
@@ -1166,8 +1318,7 @@
         playerChar2.facing = "right";
         Body.applyForce(playerChar2.torso, playerChar2.torso.position, { x: 0.01, y: 0 });
       }
-      if ((keys2["ArrowUp"] || keys2["KeyW"]) &&
-          playerChar2.jumpReady &&
+      if ((keys2["ArrowUp"] || keys2["KeyW"]) && playerChar2.jumpReady &&
           playerChar2.torso.position.y >= playAreaHeight - 60) {
         playerChar2.jumpCounter = 10;
         playerChar2.jumpReady = false;
@@ -1185,12 +1336,11 @@
         });
         playerChar2.jumpCounter--;
       }
-      if (!(keys2["ArrowUp"] || keys2["KeyW"]) &&
-           playerChar2.torso.position.y >= playAreaHeight - 60) {
+      if (!(keys2["ArrowUp"] || keys2["KeyW"]) && playerChar2.torso.position.y >= playAreaHeight - 60) {
         playerChar2.jumpReady = true;
       }
-
-      // ----- Air Steering for Player One -----
+    
+      // --- Air Steering ---
       if (playerChar1.torso.position.y < playAreaHeight - 30) {
         let airInput = { x: 0, y: 0 };
         if (keys1["ArrowLeft"]) airInput.x -= 1;
@@ -1208,8 +1358,6 @@
           });
         }
       }
-
-      // ----- Air Steering for Player Two -----
       if (playerChar2.torso.position.y < playAreaHeight - 30) {
         let airInput = { x: 0, y: 0 };
         if (keys2["ArrowLeft"]) airInput.x -= 1;
@@ -1227,8 +1375,8 @@
           });
         }
       }
-
-      // Update DOM positions for physics bodies
+    
+      // --- Update DOM Positions ---
       domEntities.forEach(body => {
         if (body.domElement) {
           body.domElement.style.left = body.position.x + "px";
@@ -1251,8 +1399,8 @@
         }
       });
       
-      updateHeldObject(playerChar1);
-      updateHeldObject(playerChar2);
+      updateHeldObject(playerChar1, joystickAim1);
+      updateHeldObject(playerChar2, joystickAim2);
       
       Body.setPosition(playerChar1.head, { x: playerChar1.torso.position.x, y: playerChar1.torso.position.y - 40 });
       Body.setVelocity(playerChar1.head, playerChar1.torso.velocity);
@@ -1331,66 +1479,7 @@
       requestAnimationFrame(update);
     }
     update();
-
-    // --- Gamepad Support ---
-    let lastGamepadButtonState = {};
-    function updateGamepadInput() {
-      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-      const threshold = 0.2;
-      for (let i = 0; i < gamepads.length; i++) {
-        const gp = gamepads[i];
-        if (!gp) continue;
-        if (gp.index === 0) {
-          if (gp.axes[0] < -threshold) { keys1["ArrowLeft"] = true; keys1["ArrowRight"] = false; }
-          else if (gp.axes[0] > threshold) { keys1["ArrowRight"] = true; keys1["ArrowLeft"] = false; }
-          else { keys1["ArrowLeft"] = false; keys1["ArrowRight"] = false; }
-          // For gamepad, use buttons[1] or [7] for grab/throw on press/release:
-          keys1["ArrowUp"] = false;
-          keys1["Space"] = false;
-          let rx = gp.axes[2], ry = gp.axes[3];
-          let rmag = Math.hypot(rx, ry);
-          if (rmag > threshold) { joystickAim1.x = rx / rmag; joystickAim1.y = ry / rmag; }
-          else { joystickAim1.x = 0; joystickAim1.y = 0; }
-          if (!lastGamepadButtonState[gp.index]) {
-            lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
-          }
-          const grabPressed = (gp.buttons[1].pressed || gp.buttons[7].pressed);
-          const grabWasPressed = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
-          if (grabPressed && !grabWasPressed) {
-            grabStart(playerChar1, joystickAim1);
-          } else if (!grabPressed && grabWasPressed) {
-            grabRelease(playerChar1, keys1, joystickAim1);
-          }
-          const meleePressed = (gp.buttons[2].pressed || gp.buttons[6].pressed);
-          const meleeWasPressed = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
-          if (meleePressed && !meleeWasPressed) { meleeAttack(playerChar1, keys1, joystickAim1); }
-          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
-        } else if (gp.index === 1) {
-          if (gp.axes[0] < -threshold) { keys2["ArrowLeft"] = true; keys2["ArrowRight"] = false; }
-          else if (gp.axes[0] > threshold) { keys2["ArrowRight"] = true; keys2["ArrowLeft"] = false; }
-          else { keys2["ArrowLeft"] = false; keys2["ArrowRight"] = false; }
-          keys2["ArrowUp"] = false;
-          keys2["Space"] = (gp.buttons[0].pressed || gp.buttons[11].pressed);
-          let rx = gp.axes[2], ry = gp.axes[3];
-          let rmag = Math.hypot(rx, ry);
-          if (rmag > threshold) { joystickAim2.x = rx / rmag; joystickAim2.y = ry / rmag; }
-          else { joystickAim2.x = 0; joystickAim2.y = 0; }
-          if (!lastGamepadButtonState[gp.index]) {
-            lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
-          }
-          const grabPressed2 = (gp.buttons[1].pressed || gp.buttons[7].pressed);
-          const grabWasPressed2 = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
-          if (grabPressed2 && !grabWasPressed2) { grabStart(playerChar2, joystickAim2); }
-          else if (!grabPressed2 && grabWasPressed2) { grabRelease(playerChar2, keys2, joystickAim2); }
-          const meleePressed2 = (gp.buttons[2].pressed || gp.buttons[6].pressed);
-          const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
-          if (meleePressed2 && !meleeWasPressed2) { meleeAttack(playerChar2, keys2, joystickAim2); }
-          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
-        }
-      }
-    }
-
-    // --- On-Screen Joystick (Player One) ---
+    
     (function() {
       const joystick = document.getElementById("joystick");
       let startX, startY;
@@ -1428,8 +1517,7 @@
       joystick.addEventListener("touchend", (e) => { dragging = false; snapBack(); e.preventDefault(); });
       joystick.addEventListener("touchcancel", (e) => { dragging = false; snapBack(); e.preventDefault(); });
     })();
-
-    // --- On-Screen Button Mappings (Player One) ---
+    
     const dpad = document.getElementById("dpad");
     dpad.querySelector(".up").addEventListener("touchstart", (e) => { e.preventDefault(); keys1["ArrowUp"] = true; });
     dpad.querySelector(".up").addEventListener("touchend", (e) => { e.preventDefault(); keys1["ArrowUp"] = false; });
@@ -1440,67 +1528,127 @@
     dpad.querySelector(".right").addEventListener("touchstart", (e) => { e.preventDefault(); keys1["ArrowRight"] = true; });
     dpad.querySelector(".right").addEventListener("touchend", (e) => { e.preventDefault(); keys1["ArrowRight"] = false; });
     const abButtons = document.getElementById("ab-buttons");
-    // Use mouse/touch for grab/hold on A button
+    // On–screen A button: for grab/hold then throw via touch
     abButtons.querySelector(".A").addEventListener("touchstart", (e) => { e.preventDefault(); grabStart(playerChar1, joystickAim1); });
     abButtons.querySelector(".A").addEventListener("touchend", (e) => { e.preventDefault(); grabRelease(playerChar1, keys1, joystickAim1); });
-    // Use Space (or KeyB) for melee attack
+    // On–screen C button triggers melee attack
     abButtons.querySelector(".C").addEventListener("touchstart", (e) => { e.preventDefault(); meleeAttack(playerChar1, keys1, joystickAim1); });
     abButtons.querySelector(".C").addEventListener("mousedown", (e) => { e.preventDefault(); meleeAttack(playerChar1, keys1, joystickAim1); });
-
-    // --- Keyboard Input for Player One ---
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { dpad.querySelector("#joystick").style.transform = "translate(0, 0)"; }
+    });
+    
+    // --- Keyboard Input for Player One (WASD for movement/jump, spacebar for melee) ---
     document.addEventListener('keydown', (e) => {
-      // Use Arrow keys or WASD for movement/jump (but NOT Space)
-      if (e.code === 'ArrowUp' || e.code === 'KeyW') { keys1["ArrowUp"] = true; }
-      if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keys1["ArrowLeft"] = true; }
-      if (e.code === 'ArrowRight' || e.code === 'KeyD') { keys1["ArrowRight"] = true; }
-      // Spacebar now triggers melee attack
-      if (e.code === 'Space') { meleeAttack(playerChar1, keys1, joystickAim1); }
+      switch(e.key.toLowerCase()){
+        case 'w': keys1["ArrowUp"] = true; break;
+        case 'a': keys1["ArrowLeft"] = true; break;
+        case 's': keys1["ArrowDown"] = true; break;
+        case 'd': keys1["ArrowRight"] = true; break;
+        case ' ': 
+          meleeAttack(playerChar1, keys1, joystickAim1);
+          break;
+      }
     });
     document.addEventListener('keyup', (e) => {
-      if (e.code === 'ArrowUp' || e.code === 'KeyW') { keys1["ArrowUp"] = false; }
-      if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keys1["ArrowLeft"] = false; }
-      if (e.code === 'ArrowRight' || e.code === 'KeyD') { keys1["ArrowRight"] = false; }
+      switch(e.key.toLowerCase()){
+        case 'w': keys1["ArrowUp"] = false; break;
+        case 'a': keys1["ArrowLeft"] = false; break;
+        case 's': keys1["ArrowDown"] = false; break;
+        case 'd': keys1["ArrowRight"] = false; break;
+      }
     });
-
-    // --- Mouse Input for Grab/Hold (Player One) ---
+    
+    // --- Mouse Input for Grab/Hold & Throw (Player One) ---
     document.addEventListener("mousedown", (e) => {
-      if (e.button === 0) { // Left mouse button
-        // Compute mouse direction relative to playerChar1's torso
-        const rect = game.getBoundingClientRect();
-        let mouseX = e.clientX + cameraX;
-        let mouseY = e.clientY + cameraY;
-        let dx = mouseX - playerChar1.torso.position.x;
-        let dy = mouseY - playerChar1.torso.position.y;
-        let mag = Math.hypot(dx, dy);
-        if (mag > 0) {
-          joystickAim1.x = dx / mag;
-          joystickAim1.y = dy / mag;
-        }
+      if (e.button === 0) {
         grabStart(playerChar1, joystickAim1);
       }
     });
     document.addEventListener("mouseup", (e) => {
       if (e.button === 0) {
-        const rect = game.getBoundingClientRect();
-        let mouseX = e.clientX + cameraX;
-        let mouseY = e.clientY + cameraY;
-        let dx = mouseX - playerChar1.torso.position.x;
-        let dy = mouseY - playerChar1.torso.position.y;
-        let mag = Math.hypot(dx, dy);
-        if (mag > 0) {
-          joystickAim1.x = dx / mag;
-          joystickAim1.y = dy / mag;
-        }
         grabRelease(playerChar1, keys1, joystickAim1);
       }
     });
-
+    
     // --- Auto-Scroll to Bottom ---
     window.addEventListener("load", () => { window.scrollTo(0, document.body.scrollHeight); });
     window.addEventListener("scroll", () => {
       const maxScroll = document.body.scrollHeight - window.innerHeight;
       if (window.scrollY < maxScroll) { window.scrollTo(0, maxScroll); }
     });
+    
+    // ================================
+    // Gamepad Support
+    // ================================
+    let lastGamepadButtonState = {};
+    window.addEventListener("gamepadconnected", (e) => {
+      console.log("Gamepad connected:", e.gamepad);
+      const controls = document.getElementById("controls");
+      if (controls) { controls.style.display = "none"; }
+    });
+    window.addEventListener("gamepaddisconnected", (e) => {
+      console.log("Gamepad disconnected:", e.gamepad);
+      delete lastGamepadButtonState[e.gamepad.index];
+      const gamepads = navigator.getGamepads();
+      let connected = false;
+      for (let i = 0; i < gamepads.length; i++) {
+        if (gamepads[i]) { connected = true; break; }
+      }
+      if (!connected) {
+        const controls = document.getElementById("controls");
+        if (controls) { controls.style.display = "flex"; }
+      }
+    });
+    function updateGamepadInput() {
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const threshold = 0.2;
+      for (let i = 0; i < gamepads.length; i++) {
+        const gp = gamepads[i];
+        if (!gp) continue;
+        if (gp.index === 0) {
+          if (gp.axes[0] < -threshold) { keys1["ArrowLeft"] = true; keys1["ArrowRight"] = false; }
+          else if (gp.axes[0] > threshold) { keys1["ArrowRight"] = true; keys1["ArrowLeft"] = false; }
+          else { keys1["ArrowLeft"] = false; keys1["ArrowRight"] = false; }
+          keys1["ArrowUp"] = false;
+          const grabPressed = gp.buttons[7].pressed;
+          const wasGrabPressed = lastGamepadButtonState[gp.index] ? lastGamepadButtonState[gp.index][7] : false;
+          if (grabPressed && !wasGrabPressed) {
+            grabStart(playerChar1, joystickAim1);
+          } else if (!grabPressed && wasGrabPressed) {
+            grabRelease(playerChar1, keys1, joystickAim1);
+          }
+          let rx = gp.axes[2], ry = gp.axes[3];
+          let rmag = Math.hypot(rx, ry);
+          if (rmag > threshold) { joystickAim1.x = rx / rmag; joystickAim1.y = ry / rmag; }
+          else { joystickAim1.x = 0; joystickAim1.y = 0; }
+          if (!lastGamepadButtonState[gp.index]) {
+            lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
+          }
+          const meleePressed = (gp.buttons[2].pressed || gp.buttons[6].pressed);
+          const meleeWasPressed = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
+          if (meleePressed && !meleeWasPressed) { meleeAttack(playerChar1, keys1, joystickAim1); }
+          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
+        } else if (gp.index === 1) {
+          if (gp.axes[0] < -threshold) { keys2["ArrowLeft"] = true; keys2["ArrowRight"] = false; }
+          else if (gp.axes[0] > threshold) { keys2["ArrowRight"] = true; keys2["ArrowLeft"] = false; }
+          else { keys2["ArrowLeft"] = false; keys2["ArrowRight"] = false; }
+          keys2["ArrowUp"] = false;
+          keys2["Space"] = (gp.buttons[0].pressed || gp.buttons[11].pressed);
+          let rx = gp.axes[2], ry = gp.axes[3];
+          let rmag = Math.hypot(rx, ry);
+          if (rmag > threshold) { joystickAim2.x = rx / rmag; joystickAim2.y = ry / rmag; }
+          else { joystickAim2.x = 0; joystickAim2.y = 0; }
+          if (!lastGamepadButtonState[gp.index]) {
+            lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
+          }
+          const meleePressed2 = (gp.buttons[2].pressed || gp.buttons[6].pressed);
+          const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
+          if (meleePressed2 && !meleeWasPressed2) { meleeAttack(playerChar2, keys2, joystickAim2); }
+          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
+        }
+      }
+    }
   </script>
 </body>
 </html>
