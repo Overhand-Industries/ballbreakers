@@ -339,6 +339,39 @@
       -webkit-mask-repeat: no-repeat;
       -webkit-mask-position: center;
     }
+    /* Booster Pixel Animation for Jump */
+    .booster-pixel {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: radial-gradient(circle at center, #FFD700 0%, #FF8C00 50%, transparent 70%);
+      image-rendering: pixelated;
+      pointer-events: none;
+      z-index: 20;
+      animation: rocketBoost 600ms cubic-bezier(0.2, 1, 0.3, 1) forwards;
+    }
+    @keyframes rocketBoost {
+      0% {
+        transform: translate(0, 0) scale(1) rotate(0deg);
+        opacity: 1;
+        filter: drop-shadow(0 0 2px #FF8C00);
+      }
+      20% {
+        transform: translate(calc(var(--dx, 0) * 0.3px), calc(var(--dy, 0) * 0.3px)) scale(1.1) rotate(calc(var(--rotation, 0) * 1deg));
+        opacity: 0.9;
+        filter: drop-shadow(0 0 2px #FFA500);
+      }
+      50% {
+        transform: translate(calc(var(--dx, 0) * 0.7px), calc(var(--dy, 0) * 0.7px)) scale(0.8) rotate(calc(var(--rotation, 0) * 1deg));
+        opacity: 0.6;
+        filter: drop-shadow(0 0 1px #FF4500);
+      }
+      100% {
+        transform: translate(calc(var(--dx, 0) * 1px), calc(var(--dy, 0) * 1px)) scale(0.5) rotate(calc(var(--rotation, 0) * 1deg));
+        opacity: 0;
+        filter: drop-shadow(0 0 1px #FF4500);
+      }
+    }
   </style>
 </head>
 <body>
@@ -361,8 +394,11 @@
         <div id="joystick"></div>
       </div>
       <div id="ab-buttons">
+        <!-- For player one: The A button (on-screen) will now perform grab/hold -->
         <button class="A"></button>
+        <!-- The B button remains for (if desired) additional functions -->
         <button class="B"></button>
+        <!-- The C button (or Spacebar) now triggers melee -->
         <button class="C"></button>
       </div>
     </div>
@@ -383,7 +419,7 @@
     let domEntities = [], platforms = [], walls = [], coins = [], bullets = [], enemies = [];
     let leftScore = 0, rightScore = 0;
 
-    // Player input objects (player one uses keyboard; player two primarily via gamepad)
+    // Player input objects (player one uses keyboard & mouse; player two primarily via gamepad)
     let keys1 = {}, keys2 = {};
     let joystickAim1 = { x: 0, y: 0 }, joystickAim2 = { x: 0, y: 0 };
     let walkCycle1 = 0, walkCycle2 = 0;
@@ -650,7 +686,7 @@
       char.facing = "right";
       // Jump properties for a springy multi-frame impulse
       char.jumpReady = true;
-      char.jumpCounter = 0;  // frames for jump impulse
+      char.jumpCounter = 0;
       const size = 20;
       const torsoOptions = { friction: 6.0, frictionAir: 0.11, restitution: 0 };
       const defaultOptions = { friction: 0.5, frictionAir: 0.01, restitution: 0 };
@@ -805,8 +841,31 @@
     }
     createEnemy(levelWidth / 2, playAreaHeight / 2);
 
-    // --- Player Grab-Throw Function ---
-    function playerShoot(player, keys, joystickAim) {
+    // --- Grab & Throw Logic ---
+    function grabStart(player, joystickAim) {
+      if (!player.heldObject) {
+        const grabRange = 1000;
+        let handPos = (player.facing === "left") ? player.leftHand.position : player.rightHand.position;
+        let bodies = Composite.allBodies(world);
+        let candidate = null;
+        let candidateDist = Infinity;
+        for (let i = 0; i < bodies.length; i++) {
+          let body = bodies[i];
+          if (body.isStatic || body.character || body.label === "bullet" ||
+              body.label === "leftGoal" || body.label === "rightGoal") continue;
+          let dx = body.position.x - handPos.x;
+          let dy = body.position.y - handPos.y;
+          let dist = Math.hypot(dx, dy);
+          if (dist < grabRange && dist < candidateDist) { candidate = body; candidateDist = dist; }
+        }
+        if (candidate) {
+          player.heldObject = candidate;
+          Body.setVelocity(candidate, { x: 0, y: 0 });
+          candidate.collisionFilter.mask = 0;
+        }
+      }
+    }
+    function grabRelease(player, keys, joystickAim) {
       if (player.heldObject) {
         let obj = player.heldObject;
         let dx = 0, dy = 0;
@@ -830,25 +889,6 @@
         Body.setAngularVelocity(obj, 0.5);
         obj.collisionFilter.mask = 0xFFFFFFFF;
         player.heldObject = null;
-      } else {
-        const grabRange = 1000;
-        let handPos = (player.facing === "left") ? player.leftHand.position : player.rightHand.position;
-        let bodies = Composite.allBodies(world);
-        let candidate = null;
-        let candidateDist = Infinity;
-        for (let i = 0; i < bodies.length; i++) {
-          let body = bodies[i];
-          if (body.isStatic || body.character || body.label === "bullet" || body.label === "leftGoal" || body.label === "rightGoal") continue;
-          let dx = body.position.x - handPos.x;
-          let dy = body.position.y - handPos.y;
-          let dist = Math.hypot(dx, dy);
-          if (dist < grabRange && dist < candidateDist) { candidate = body; candidateDist = dist; }
-        }
-        if (candidate) {
-          player.heldObject = candidate;
-          Body.setVelocity(candidate, { x: 0, y: 0 });
-          candidate.collisionFilter.mask = 0;
-        }
       }
     }
     function updateHeldObject(player) {
@@ -858,7 +898,7 @@
       }
     }
 
-    // --- Helper Function for Melee (Cone Check) ---
+    // --- Core Melee Attack Function ---
     function isWithinCone(origin, direction, targetPos, range, angleThreshold) {
       const vector = { x: targetPos.x - origin.x, y: targetPos.y - origin.y };
       const distance = Math.hypot(vector.x, vector.y);
@@ -869,8 +909,6 @@
       if (diff > Math.PI) diff = 2 * Math.PI - diff;
       return diff <= angleThreshold;
     }
-
-    // --- Core Melee Attack Function ---
     function meleeAttack(player, keys, joystickAim) {
       let inputDir = { x: 0, y: 0 };
       if (keys["ArrowLeft"])  inputDir.x -= 1;
@@ -967,14 +1005,12 @@
       ], { duration: 1000, easing: "ease-out", fill: "forwards" });
       setTimeout(() => { if (koText.parentNode) koText.parentNode.removeChild(koText); }, 1000);
     }
-
     function triggerScreenshake() {
       const screenEl = document.getElementById("screen");
       screenEl.classList.remove("shake");
       void screenEl.offsetWidth;
       screenEl.classList.add("shake");
     }
-
     function checkEnemyOutOfBounds() {
       enemies.slice().forEach(enemy => {
         const pos = enemy.body.position;
@@ -989,7 +1025,6 @@
         }
       });
     }
-
     function triggerOutEffect() {
       const outText = document.createElement("div");
       outText.id = "outText";
@@ -1097,17 +1132,17 @@
         playerChar1.facing = "right";
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: 0.01, y: 0 });
       }
-      // --- Springy Jump for Player One ---
-      if ((keys1["KeyB"] || keys1["Space"] || keys1["ArrowUp"] || keys1["KeyW"]) &&
+      // --- Jump for Player One (triggered only by Up arrow or W) ---
+      if ((keys1["ArrowUp"] || keys1["KeyW"]) &&
           playerChar1.jumpReady &&
           playerChar1.torso.position.y >= playAreaHeight - 60) {
-        playerChar1.jumpCounter = 10;  // frames for jump impulse
+        playerChar1.jumpCounter = 10;
         playerChar1.jumpReady = false;
       }
       if (playerChar1.jumpCounter > 0) {
         const baseJumpForce = 0.09;
         let horizontalInput = 0;
-        if (keys1["ArrowLeft"])  horizontalInput -= 1;
+        if (keys1["ArrowLeft"]) horizontalInput -= 1;
         if (keys1["ArrowRight"]) horizontalInput += 1;
         if (Math.abs(joystickAim1.x) > 0.1) horizontalInput = joystickAim1.x;
         const decay = playerChar1.jumpCounter / 10;
@@ -1117,7 +1152,7 @@
         });
         playerChar1.jumpCounter--;
       }
-      if (!(keys1["KeyB"] || keys1["Space"] || keys1["ArrowUp"] || keys1["KeyW"]) &&
+      if (!(keys1["ArrowUp"] || keys1["KeyW"]) &&
            playerChar1.torso.position.y >= playAreaHeight - 60) {
         playerChar1.jumpReady = true;
       }
@@ -1131,7 +1166,7 @@
         playerChar2.facing = "right";
         Body.applyForce(playerChar2.torso, playerChar2.torso.position, { x: 0.01, y: 0 });
       }
-      if ((keys2["Space"] || keys2["ArrowUp"] || keys2["KeyW"]) &&
+      if ((keys2["ArrowUp"] || keys2["KeyW"]) &&
           playerChar2.jumpReady &&
           playerChar2.torso.position.y >= playAreaHeight - 60) {
         playerChar2.jumpCounter = 10;
@@ -1140,7 +1175,7 @@
       if (playerChar2.jumpCounter > 0) {
         const baseJumpForce = 0.09;
         let horizontalInput = 0;
-        if (keys2["ArrowLeft"])  horizontalInput -= 1;
+        if (keys2["ArrowLeft"]) horizontalInput -= 1;
         if (keys2["ArrowRight"]) horizontalInput += 1;
         if (Math.abs(joystickAim2.x) > 0.1) horizontalInput = joystickAim2.x;
         const decay = playerChar2.jumpCounter / 10;
@@ -1150,7 +1185,7 @@
         });
         playerChar2.jumpCounter--;
       }
-      if (!(keys2["Space"] || keys2["ArrowUp"] || keys2["KeyW"]) &&
+      if (!(keys2["ArrowUp"] || keys2["KeyW"]) &&
            playerChar2.torso.position.y >= playAreaHeight - 60) {
         playerChar2.jumpReady = true;
       }
@@ -1158,10 +1193,10 @@
       // ----- Air Steering for Player One -----
       if (playerChar1.torso.position.y < playAreaHeight - 30) {
         let airInput = { x: 0, y: 0 };
-        if (keys1["ArrowLeft"])  airInput.x -= 1;
+        if (keys1["ArrowLeft"]) airInput.x -= 1;
         if (keys1["ArrowRight"]) airInput.x += 1;
-        if (keys1["ArrowUp"])    airInput.y -= 1;
-        if (keys1["ArrowDown"])  airInput.y += 1;
+        if (keys1["ArrowUp"]) airInput.y -= 1;
+        if (keys1["ArrowDown"]) airInput.y += 1;
         let mag = Math.hypot(airInput.x, airInput.y);
         if (mag > 0) {
           airInput.x /= mag;
@@ -1177,10 +1212,10 @@
       // ----- Air Steering for Player Two -----
       if (playerChar2.torso.position.y < playAreaHeight - 30) {
         let airInput = { x: 0, y: 0 };
-        if (keys2["ArrowLeft"])  airInput.x -= 1;
+        if (keys2["ArrowLeft"]) airInput.x -= 1;
         if (keys2["ArrowRight"]) airInput.x += 1;
-        if (keys2["ArrowUp"])    airInput.y -= 1;
-        if (keys2["ArrowDown"])  airInput.y += 1;
+        if (keys2["ArrowUp"]) airInput.y -= 1;
+        if (keys2["ArrowDown"]) airInput.y += 1;
         let mag = Math.hypot(airInput.x, airInput.y);
         if (mag > 0) {
           airInput.x /= mag;
@@ -1309,8 +1344,9 @@
           if (gp.axes[0] < -threshold) { keys1["ArrowLeft"] = true; keys1["ArrowRight"] = false; }
           else if (gp.axes[0] > threshold) { keys1["ArrowRight"] = true; keys1["ArrowLeft"] = false; }
           else { keys1["ArrowLeft"] = false; keys1["ArrowRight"] = false; }
+          // For gamepad, use buttons[1] or [7] for grab/throw on press/release:
           keys1["ArrowUp"] = false;
-          keys1["Space"] = (gp.buttons[0] && gp.buttons[0].pressed) || (gp.buttons[11] && gp.buttons[11].pressed);
+          keys1["Space"] = false;
           let rx = gp.axes[2], ry = gp.axes[3];
           let rmag = Math.hypot(rx, ry);
           if (rmag > threshold) { joystickAim1.x = rx / rmag; joystickAim1.y = ry / rmag; }
@@ -1318,9 +1354,13 @@
           if (!lastGamepadButtonState[gp.index]) {
             lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
           }
-          const shootPressed = (gp.buttons[1].pressed || gp.buttons[7].pressed);
-          const shootWasPressed = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
-          if (shootPressed && !shootWasPressed) { playerShoot(playerChar1, keys1, joystickAim1); }
+          const grabPressed = (gp.buttons[1].pressed || gp.buttons[7].pressed);
+          const grabWasPressed = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
+          if (grabPressed && !grabWasPressed) {
+            grabStart(playerChar1, joystickAim1);
+          } else if (!grabPressed && grabWasPressed) {
+            grabRelease(playerChar1, keys1, joystickAim1);
+          }
           const meleePressed = (gp.buttons[2].pressed || gp.buttons[6].pressed);
           const meleeWasPressed = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
           if (meleePressed && !meleeWasPressed) { meleeAttack(playerChar1, keys1, joystickAim1); }
@@ -1338,9 +1378,10 @@
           if (!lastGamepadButtonState[gp.index]) {
             lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
           }
-          const shootPressed2 = (gp.buttons[1].pressed || gp.buttons[7].pressed);
-          const shootWasPressed2 = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
-          if (shootPressed2 && !shootWasPressed2) { playerShoot(playerChar2, keys2, joystickAim2); }
+          const grabPressed2 = (gp.buttons[1].pressed || gp.buttons[7].pressed);
+          const grabWasPressed2 = (lastGamepadButtonState[gp.index][1] || lastGamepadButtonState[gp.index][7]);
+          if (grabPressed2 && !grabWasPressed2) { grabStart(playerChar2, joystickAim2); }
+          else if (!grabPressed2 && grabWasPressed2) { grabRelease(playerChar2, keys2, joystickAim2); }
           const meleePressed2 = (gp.buttons[2].pressed || gp.buttons[6].pressed);
           const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
           if (meleePressed2 && !meleeWasPressed2) { meleeAttack(playerChar2, keys2, joystickAim2); }
@@ -1399,29 +1440,58 @@
     dpad.querySelector(".right").addEventListener("touchstart", (e) => { e.preventDefault(); keys1["ArrowRight"] = true; });
     dpad.querySelector(".right").addEventListener("touchend", (e) => { e.preventDefault(); keys1["ArrowRight"] = false; });
     const abButtons = document.getElementById("ab-buttons");
-    abButtons.querySelector(".A").addEventListener("touchstart", (e) => { e.preventDefault(); playerShoot(playerChar1, keys1, joystickAim1); });
-    abButtons.querySelector(".B").addEventListener("touchstart", (e) => { e.preventDefault(); keys1["Space"] = true; });
-    abButtons.querySelector(".B").addEventListener("touchend", (e) => { e.preventDefault(); keys1["Space"] = false; });
+    // Use mouse/touch for grab/hold on A button
+    abButtons.querySelector(".A").addEventListener("touchstart", (e) => { e.preventDefault(); grabStart(playerChar1, joystickAim1); });
+    abButtons.querySelector(".A").addEventListener("touchend", (e) => { e.preventDefault(); grabRelease(playerChar1, keys1, joystickAim1); });
+    // Use Space (or KeyB) for melee attack
     abButtons.querySelector(".C").addEventListener("touchstart", (e) => { e.preventDefault(); meleeAttack(playerChar1, keys1, joystickAim1); });
     abButtons.querySelector(".C").addEventListener("mousedown", (e) => { e.preventDefault(); meleeAttack(playerChar1, keys1, joystickAim1); });
 
     // --- Keyboard Input for Player One ---
     document.addEventListener('keydown', (e) => {
-      // Use Arrow keys or WASD for movement/jumping for player one
+      // Use Arrow keys or WASD for movement/jump (but NOT Space)
       if (e.code === 'ArrowUp' || e.code === 'KeyW') { keys1["ArrowUp"] = true; }
       if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keys1["ArrowLeft"] = true; }
       if (e.code === 'ArrowRight' || e.code === 'KeyD') { keys1["ArrowRight"] = true; }
-      if (e.code === 'Space' || e.code === 'KeyB') { keys1["Space"] = true; }
+      // Spacebar now triggers melee attack
+      if (e.code === 'Space') { meleeAttack(playerChar1, keys1, joystickAim1); }
     });
     document.addEventListener('keyup', (e) => {
       if (e.code === 'ArrowUp' || e.code === 'KeyW') { keys1["ArrowUp"] = false; }
       if (e.code === 'ArrowLeft' || e.code === 'KeyA') { keys1["ArrowLeft"] = false; }
       if (e.code === 'ArrowRight' || e.code === 'KeyD') { keys1["ArrowRight"] = false; }
-      if (e.code === 'Space' || e.code === 'KeyB') { keys1["Space"] = false; }
-      // Also reset on-screen joystick transform if left/right keys released
-      if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
-        const playerElem = document.querySelector('.player-part');
-        if (playerElem) { playerElem.style.transform = "translate(-50%, -50%)"; }
+    });
+
+    // --- Mouse Input for Grab/Hold (Player One) ---
+    document.addEventListener("mousedown", (e) => {
+      if (e.button === 0) { // Left mouse button
+        // Compute mouse direction relative to playerChar1's torso
+        const rect = game.getBoundingClientRect();
+        let mouseX = e.clientX + cameraX;
+        let mouseY = e.clientY + cameraY;
+        let dx = mouseX - playerChar1.torso.position.x;
+        let dy = mouseY - playerChar1.torso.position.y;
+        let mag = Math.hypot(dx, dy);
+        if (mag > 0) {
+          joystickAim1.x = dx / mag;
+          joystickAim1.y = dy / mag;
+        }
+        grabStart(playerChar1, joystickAim1);
+      }
+    });
+    document.addEventListener("mouseup", (e) => {
+      if (e.button === 0) {
+        const rect = game.getBoundingClientRect();
+        let mouseX = e.clientX + cameraX;
+        let mouseY = e.clientY + cameraY;
+        let dx = mouseX - playerChar1.torso.position.x;
+        let dy = mouseY - playerChar1.torso.position.y;
+        let mag = Math.hypot(dx, dy);
+        if (mag > 0) {
+          joystickAim1.x = dx / mag;
+          joystickAim1.y = dy / mag;
+        }
+        grabRelease(playerChar1, keys1, joystickAim1);
       }
     });
 
@@ -1431,10 +1501,6 @@
       const maxScroll = document.body.scrollHeight - window.innerHeight;
       if (window.scrollY < maxScroll) { window.scrollTo(0, maxScroll); }
     });
-
-    // --- Gamepad Support (already defined above) ---
-    // (The updateGamepadInput function is already declared earlier.)
-
   </script>
 </body>
 </html>
