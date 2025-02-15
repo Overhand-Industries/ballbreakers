@@ -888,7 +888,7 @@
       }
     }
 
-    // OLD playerShoot is no longer used for grab/throw
+    // OLD playerShoot remains defined but is not used for grab/throw
 
     function isWithinCone(origin, direction, targetPos, range, angleThreshold) {
       const vector = { x: targetPos.x - origin.x, y: targetPos.y - origin.y };
@@ -1163,257 +1163,49 @@
       goalText.classList.add("goalTextAnimation");
       setTimeout(() => { if (goalText.parentNode) { goalText.parentNode.removeChild(goalText); } }, 1000);
     }
-    function damageDestructible(obj, damage) {
-      if (typeof obj.hp !== "number") return;
-      obj.hp -= damage;
-      particleBurst(obj.position.x, obj.position.y, "orange");
-      if (obj.hp <= 0) {
-        particleBurst(obj.position.x, obj.position.y, "red");
-        if (obj.label === "wall") { breakWall(obj); }
-        else if (obj.label === "platform") { breakBoulder(obj); }
-        else {
-          World.remove(world, obj);
-          if (obj.domElement && obj.domElement.parentNode) {
-            obj.domElement.parentNode.removeChild(obj.domElement);
-          }
-          if (obj.label === "platform") {
-            let idx = platforms.indexOf(obj);
-            if (idx !== -1) platforms.splice(idx, 1);
-          } else if (obj.label === "enemy") {
-            let idx = enemies.findIndex(e => e.body === obj);
-            if (idx !== -1) enemies.splice(idx, 1);
-          }
-        }
-      }
-    }
-    function breakWall(wall) {
-      World.remove(world, wall);
-      if (wall.domElement && wall.domElement.parentNode) {
-        wall.domElement.parentNode.removeChild(wall.domElement);
-      }
-      let idx = walls.indexOf(wall);
-      if (idx !== -1) walls.splice(idx, 1);
-      const isStalagmite = wall.domElement.classList.contains("stalagmite");
-      const cols = isStalagmite ? 3 : 2;
-      const rows = isStalagmite ? 3 : 2;
-      const chunkWidth = wall.width / cols;
-      const chunkHeight = wall.height / rows;
-      for (let i = 0; i < rows; i++) {
-        for (let j = 0; j < cols; j++) {
-          const cx = wall.position.x - wall.width/2 + chunkWidth/2 + j * chunkWidth;
-          const cy = wall.position.y - wall.height/2 + chunkHeight/2 + i * chunkHeight;
-          let chunk = Bodies.rectangle(cx, cy, chunkWidth, chunkHeight, { isStatic: false, label: "wallChunk" });
-          Body.setVelocity(chunk, { x: (Math.random()-0.5)*10, y: (Math.random()-0.5)*10 });
-          World.add(world, chunk);
-          const el = document.createElement("div");
-          el.className = "rock-chunk";
-          el.style.width = chunkWidth + "px";
-          el.style.height = chunkHeight + "px";
-          el.style.left = cx + "px";
-          el.style.top = cy + "px";
-          if (isStalagmite) {
-            el.style.borderRadius = "0";
-            el.style.clipPath = "polygon(50% 100%, 0% 0%, 100% 0%)";
-          }
-          game.appendChild(el);
-          chunk.domElement = el;
-          domEntities.push(chunk);
-        }
-      }
-    }
-    function breakBoulder(boulder) {
-      World.remove(world, boulder);
-      if (boulder.domElement && boulder.domElement.parentNode) {
-        boulder.domElement.parentNode.removeChild(boulder.domElement);
-      }
-      let idx = platforms.indexOf(boulder);
-      if (idx !== -1) platforms.splice(idx, 1);
-      const cols = 3, rows = 3;
-      const chunkWidth = boulder.width / cols;
-      const chunkHeight = boulder.height / rows;
-      for (let i = 0; i < rows; i++) {
-        for (let j = 0; j < cols; j++) {
-          const cx = boulder.position.x - boulder.width/2 + chunkWidth/2 + j * chunkWidth;
-          const cy = boulder.position.y - boulder.height/2 + chunkHeight/2 + i * chunkHeight;
-          let chunk = Bodies.rectangle(cx, cy, chunkWidth, chunkHeight, { isStatic: false, label: "boulderChunk" });
-          Body.setVelocity(chunk, { x: (Math.random()-0.5)*10, y: (Math.random()-0.5)*10 });
-          World.add(world, chunk);
-          const el = document.createElement("div");
-          el.className = "rock-chunk";
-          el.style.width = chunkWidth + "px";
-          el.style.height = chunkHeight + "px";
-          el.style.left = cx + "px";
-          el.style.top = cy + "px";
-          game.appendChild(el);
-          chunk.domElement = el;
-          domEntities.push(chunk);
-        }
-      }
-    }
-    function createTV(x, y, width, height) {
-      const options = { isStatic: true, label: "tv", density: 0.01 };
-      const tv = Bodies.rectangle(x + width / 2, y + height / 2, width, height, options);
-      tv.width = width;
-      tv.height = height;
-      tv.hp = 30;
-      World.add(world, tv);
-      const el = document.createElement("div");
-      el.className = "tv";
-      el.style.width = width + "px";
-      el.style.height = height + "px";
-      el.style.left = (x + width / 2) + "px";
-      el.style.top = (y + height / 2) + "px";
-      game.appendChild(el);
-      tv.domElement = el;
-      tvs.push(tv);
-      return tv;
-    }
-    for (let i = 0; i < 10; i++) {
-      const tvX = Math.random() * (levelWidth - 40);
-      const tvY = 100 + Math.random() * 200;
-      createTV(tvX, tvY, 40, 60);
-    }
-    function breakTV(tv) {
-      World.remove(world, tv);
-      if (tv.domElement && tv.domElement.parentNode) {
-        tv.domElement.parentNode.removeChild(tv.domElement);
-      }
-      const idx = tvs.indexOf(tv);
-      if (idx !== -1) { tvs.splice(idx, 1); }
-      let screenEl = document.getElementById("screen");
+    
+    // NEW: Define checkEnemyOutOfBounds and its helper triggerOutEffect
+    function triggerOutEffect() {
+      const outText = document.createElement("div");
+      outText.id = "outText";
+      outText.innerText = "OUT!";
+      outText.style.position = "absolute";
+      outText.style.top = "50%";
+      outText.style.left = "50%";
+      outText.style.transform = "translate(-50%, -50%)";
+      outText.style.fontSize = "72px";
+      outText.style.fontWeight = "bold";
+      outText.style.fontFamily = '"Impact", "Arial Black", sans-serif';
+      outText.style.color = "red";
+      outText.style.zIndex = "60";
+      outText.style.pointerEvents = "none";
+      game.appendChild(outText);
+      const screenEl = document.getElementById("screen");
       screenEl.classList.remove("shake");
       void screenEl.offsetWidth;
       screenEl.classList.add("shake");
-      spawnCoins(tv.position.x, tv.position.y);
+      outText.classList.add("goalTextAnimation");
+      setTimeout(() => {
+        if (outText.parentNode) {
+          outText.parentNode.removeChild(outText);
+        }
+      }, 1000);
     }
-    function spawnCoins(x, y) {
-      for (let i = 0; i < 3; i++) {
-        const coin = Bodies.circle(x, y, 10, { isStatic: false, label: "coin", restitution: 0.5 });
-        coin.value = 1;
-        World.add(world, coin);
-        const el = document.createElement("div");
-        el.className = "coin";
-        el.textContent = "$";
-        el.style.width = "20px";
-        el.style.height = "20px";
-        el.style.lineHeight = "20px";
-        el.style.fontSize = "14px";
-        el.style.textAlign = "center";
-        el.style.borderRadius = "50%";
-        el.style.boxShadow = "0 0 20px 10px rgba(255,255,200,0.9)";
-        el.style.background = "gold";
-        el.style.color = "black";
-        game.appendChild(el);
-        coin.domElement = el;
-        coins.push(coin);
-        const angle = Math.random() * 2 * Math.PI;
-        const speed = Math.random() * 5 + 2;
-        Body.setVelocity(coin, { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed });
-      }
-    }
-    function spawnSpark(x, y) {
-      const spark = document.createElement("div");
-      spark.style.position = "absolute";
-      spark.style.left = x + "px";
-      spark.style.top = y + "px";
-      spark.style.width = "10px";
-      spark.style.height = "10px";
-      spark.style.background = "rgba(255,255,150,1)";
-      spark.style.borderRadius = "50%";
-      spark.style.boxShadow = "0 0 15px 5px rgba(255,255,150,0.8)";
-      spark.style.pointerEvents = "none";
-      spark.style.opacity = "1";
-      game.appendChild(spark);
-      spark.animate([
-        { transform: "scale(1)", opacity: 1 },
-        { transform: "scale(2)", opacity: 0 }
-      ], {
-        duration: 500,
-        easing: "ease-out",
-        fill: "forwards"
+    function checkEnemyOutOfBounds() {
+      enemies.slice().forEach(enemy => {
+        const pos = enemy.body.position;
+        const outHorizontally = pos.x < 0 || pos.x > levelWidth;
+        const outBelowSafety = pos.y > safetyFloorY;
+        const groundCenter = (playAreaHeight - 20) + (groundExtraHeight / 2);
+        const groundPenetration = pos.y > groundCenter && enemy.body.speed > 3;
+        if (outHorizontally || outBelowSafety || groundPenetration) {
+          triggerOutEffect();
+          removeEnemy(enemy.body);
+          setTimeout(() => { createEnemy(levelWidth / 2, playAreaHeight / 2); }, 2000);
+        }
       });
-      setTimeout(() => { if (spark.parentNode) { spark.parentNode.removeChild(spark); } }, 500);
     }
-    function particleBurst(x, y, color) {
-      const numParticles = 20;
-      for (let i = 0; i < numParticles; i++) {
-        const particle = document.createElement("div");
-        particle.style.position = "absolute";
-        particle.style.left = x + "px";
-        particle.style.top = y + "px";
-        particle.style.width = "4px";
-        particle.style.height = "4px";
-        particle.style.backgroundColor = color;
-        particle.style.borderRadius = "50%";
-        particle.style.pointerEvents = "none";
-        particle.style.opacity = "1";
-        particle.style.transform = "translate(-50%, -50%)";
-        game.appendChild(particle);
-        const angle = Math.random() * 2 * Math.PI;
-        const distance = Math.random() * 50 + 20;
-        const deltaX = Math.cos(angle) * distance;
-        const deltaY = Math.sin(angle) * distance;
-        particle.animate([
-          { transform: `translate(0px, 0px)`, opacity: 1 },
-          { transform: `translate(${deltaX}px, ${deltaY}px)`, opacity: 0 }
-        ], {
-          duration: 800 + Math.random() * 400,
-          easing: "ease-out",
-          fill: "forwards"
-        });
-        setTimeout(() => { if (particle.parentNode) particle.parentNode.removeChild(particle); }, 1200);
-      }
-    }
-
-    let cameraX = 0, cameraY = 0;
-    function updateCamera() {
-      const screenWidth = window.innerWidth;
-      const screenHeight = window.innerHeight;
-      
-      let points = [
-        playerChar1.torso.position,
-        playerChar2.torso.position
-      ];
-      if (enemies.length > 0) {
-        points.push(enemies[0].body.position);
-      }
-      
-      let sumX = 0, sumY = 0;
-      points.forEach(p => {
-        sumX += p.x;
-        sumY += p.y;
-      });
-      const centerX = sumX / points.length;
-      const centerY = sumY / points.length;
-      
-      const margin = 100;
-      let minX = Math.min(...points.map(p => p.x)) - margin;
-      let maxX = Math.max(...points.map(p => p.x)) + margin;
-      let minY = Math.min(...points.map(p => p.y)) - margin;
-      let maxY = Math.max(...points.map(p => p.y)) + margin;
-      
-      const boxWidth = maxX - minX;
-      const boxHeight = maxY - minY;
-      
-      const scaleX = screenWidth / boxWidth;
-      const scaleY = screenHeight / boxHeight;
-      let scale = Math.min(scaleX, scaleY, 1);
-      window.currentScale = scale;
-      
-      let camX = centerX - screenWidth / (2 * scale);
-      let camY = centerY - screenHeight / (2 * scale);
-      
-      camX = Math.max(0, Math.min(camX, levelWidth - screenWidth / scale));
-      camY = Math.max(0, Math.min(camY, gameHeight - screenHeight / scale));
-      
-      cameraX = camX;
-      cameraY = camY;
-      
-      game.style.transformOrigin = "top left";
-      game.style.transform = `translate(-${cameraX}px, -${cameraY}px) scale(${scale})`;
-      document.getElementById("parallax").style.backgroundPosition = (-cameraX * 0.5) + "px 0";
-    }
-
+    
     // --- NEW: Keyboard and Mouse Controls (WASD, Mouse Aiming) ---
     document.addEventListener('keydown', (e) => {
       switch(e.key.toLowerCase()){
@@ -1871,6 +1663,8 @@
           enemy.body.domElement.style.transform = "translate(-50%, -50%) rotate(" + enemy.body.angle + "rad)";
         }
       });
+      
+      // Call checkEnemyOutOfBounds to remove enemies out of bounds.
       checkEnemyOutOfBounds();
       updateCamera();
       requestAnimationFrame(update);
