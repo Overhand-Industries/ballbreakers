@@ -2,8 +2,9 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <!-- The viewport-fit=cover tells supported browsers to use the full display area -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
-  <title>ballbreakers – Platformer with Slingshot Jump</title>
+  <title>ballbreakers – Platformer with Fast-Fall</title>
   <style>
     /* Reset & Full-Screen Setup */
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -31,14 +32,14 @@
     /* Ground */
     #ground { position: absolute; left: 0; background: #0d0c29; }
     
-    /* (On-screen touch controls removed) */
+    /* (On-screen controls removed) */
     
     /* In-Game Entity Styling */
     .entity { position: absolute; transform: translate(-50%, -50%); pointer-events: none; transition: transform 0.5s ease, opacity 0.5s ease; }
     /* HP Bar Styling */
     .hp-bar-container { position: absolute; width: 50px; height: 6px; background: rgba(0,0,0,0.5); border: 1px solid #000; border-radius: 3px; pointer-events: none; }
     .hp-bar { width: 100%; height: 100%; background: lime; border-radius: 3px; }
-    /* Player Parts */
+    /* Player Parts (Bubbles) */
     .player-part {
       transform-origin: center; background: #fff; width: 20px; height: 20px; border-radius: 50%;
       box-shadow: 0 0 14px rgba(255,255,255,0.2); position: absolute;
@@ -78,16 +79,14 @@
     .goalTextAnimation { animation: goalTextAnimationKeyframes 1s ease; }
     .tv {
       position: absolute; width: 150px; height: 100px; background: rgba(13,12,41,0.7);
-      border: 2px solid rgba(153,153,153,0.8); border-radius: 4px; box-shadow: 0 0 15px rgba(255,255,255,0.2); overflow: hidden;
-      animation: tvRandomize 4s infinite alternate;
+      border: 2px solid rgba(153,153,153,0.8); border-radius: 4px; box-shadow: 0 0 15px rgba(255,255,255,0.2);
+      overflow: hidden; animation: tvRandomize 4s infinite alternate;
     }
-    .tv::before {
-      content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    .tv::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       background: radial-gradient(circle at top left, rgba(255,255,255,0.5), transparent 60%);
       pointer-events: none;
     }
-    .tv::after {
-      content: ""; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+    .tv::after { content: ""; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
       background: linear-gradient(45deg, rgba(255,255,255,0.2) 25%, rgba(255,255,255,0) 40%, rgba(255,255,255,0.2) 75%);
       transform: rotate(45deg); opacity: 0.5; pointer-events: none; animation: shine 2s infinite;
     }
@@ -102,7 +101,12 @@
     .player-part.player2::after { background: url('overlay2.gif') center/cover no-repeat; }
     .head.player2 { mask-image: url('overlay2.gif'); mask-repeat: no-repeat; mask-position: center; mask-size: 500px; -webkit-mask-image: url('overlay2.gif'); -webkit-mask-size: 500px; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; }
     .enemy-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%; background: url('overlay9.gif') center/cover no-repeat; pointer-events: none; }
-    .booster-pixel { position: absolute; width: 4px; height: 4px; background: radial-gradient(circle at center, #FFD700 0%, #FF8C00 50%, transparent 70%); image-rendering: pixelated; pointer-events: none; z-index: 20; animation: rocketBoost 600ms cubic-bezier(0.2,1,0.3,1) forwards; }
+    .booster-pixel {
+      position: absolute; width: 4px; height: 4px;
+      background: radial-gradient(circle at center, #FFD700 0%, #FF8C00 50%, transparent 70%);
+      image-rendering: pixelated; pointer-events: none; z-index: 20;
+      animation: rocketBoost 600ms cubic-bezier(0.2,1,0.3,1) forwards;
+    }
     @keyframes rocketBoost {
       0% { transform: translate(0,0) scale(1) rotate(0deg); opacity: 1; filter: drop-shadow(0 0 2px #FF8C00); }
       20% { transform: translate(calc(var(--dx,0)*0.3px), calc(var(--dy,0)*0.3px)) scale(1.1) rotate(calc(var(--rotation,0)*1deg)); opacity: 0.9; filter: drop-shadow(0 0 2px #FFA500); }
@@ -263,8 +267,8 @@
       World.add(world, boulder);
       const el = document.createElement("div");
       el.className = "boulder";
-      el.style.width = width + "px";
-      el.style.height = height + "px";
+      el.style.width = width+"px";
+      el.style.height = height+"px";
       el.style.left = (x+width/2)+"px";
       el.style.top = (y+height/2)+"px";
       el.style.backgroundColor = "#0d0c29";
@@ -277,7 +281,7 @@
     function createWall(x, y, width, height) {
       let body, el;
       if (y < playAreaHeight/2) {
-        const vertices = [{ x: -width/2, y: 0 }, { x: width/2, y: 0 }, { x: 0, y: height }];
+        const vertices = [ { x: -width/2, y: 0 }, { x: width/2, y: 0 }, { x: 0, y: height } ];
         body = Bodies.fromVertices(x+width/2, height/3, [vertices], { isStatic:true, label:"wall" }, true);
         body.width = width; body.height = height; body.hp = 100;
         World.add(world, body);
@@ -290,7 +294,7 @@
         el.style.backgroundColor = "#0d0c29";
         el.style.clipPath = "polygon(50% 100%, 0% 0%, 100% 0%)";
       } else {
-        const vertices = [{ x: -width/2, y: height }, { x: width/2, y: height }, { x: 0, y: 0 }];
+        const vertices = [ { x: -width/2, y: height }, { x: width/2, y: height }, { x: 0, y: 0 } ];
         body = Bodies.fromVertices(x+width/2, playAreaHeight-(2*height)/3, [vertices], { isStatic:true, label:"wall" }, true);
         body.width = width; body.height = height; body.hp = 100;
         World.add(world, body);
@@ -314,12 +318,12 @@
       const width = Math.floor(Math.random()*101)+200;
       const x = Math.random()*(levelWidth-width);
       const y = 300+Math.random()*(playAreaHeight-350);
-      createPlatform(x,y,width,20);
+      createPlatform(x, y, width, 20);
     }
     for (let i = 0; i < 1; i++) {
       const width = 40;
       const x = Math.random()*(levelWidth-width);
-      createWall(x,100,width,200);
+      createWall(x, 100, width, 200);
     }
     
     const groundBody = Bodies.rectangle(levelWidth/2, playAreaHeight, levelWidth+40, 40, { isStatic: true });
@@ -407,9 +411,9 @@
     function createCharacter(x, y) {
       const char = { hp: 100, alive: true, spawn: { x, y }, heldObject: null, isDying: false };
       char.facing = "right";
-      // NEW: For jump state and slingshot charge
+      // For jump state and slingshot charge.
       char.jumpReady = true;
-      char.jumpCounter = 0; // Removed multi-frame jump below in favor of impulse
+      char.jumpCounter = 0; // (Using impulse jump now.)
       char.slingCharge = 0;
       const size = 20;
       const torsoOptions = { friction: 6.0, frictionAir: 0.11, restitution: 0 };
@@ -540,7 +544,7 @@
     }
     createEnemy(levelWidth/2, playAreaHeight/2);
     
-    /* --- Grab & Throw (applied to the playable character) --- */
+    /* --- Grab & Throw Functions (for playable character) --- */
     function grabStart(player, joystickAim) {
       if (!player.heldObject) {
         const grabRange = 1000;
@@ -557,7 +561,7 @@
         }
         if (candidate) {
           player.heldObject = candidate;
-          candidate.collisionFilter.mask = 0;
+          candidate.collisionFilter.mask = 0; // disable collisions while held
         }
       }
     }
@@ -592,7 +596,7 @@
       }
     }
     
-    /* --- Melee Attack --- */
+    /* --- Melee Attack Function --- */
     function isWithinCone(origin, direction, targetPos, range, angleThreshold) {
       const vector = { x: targetPos.x - origin.x, y: targetPos.y - origin.y };
       const distance = Math.hypot(vector.x, vector.y);
@@ -621,7 +625,7 @@
       const option2 = { x: -attackDir.y, y: attackDir.x };
       const tangent = (option1.y<0) ? option1 : option2;
       const maxWhipDistance = 20, swingTime = 300, steps = 15;
-      const stepTime = swingTime / steps;
+      const stepTime = swingTime/steps;
       let step = 0;
       const forceOut = 0.05, forceTangent = 0.05;
       const interval = setInterval(() => {
@@ -682,7 +686,7 @@
     function digitalPixelExplosion(x, y) {
       triggerScreenshake();
       const numPixels = 50;
-      for (let i=0;i<numPixels;i++){
+      for (let i = 0; i < numPixels; i++){
         const pixel = document.createElement("div");
         pixel.style.position = "absolute";
         pixel.style.left = x + "px";
@@ -712,9 +716,7 @@
       spawnSpark(coin.position.x, coin.position.y);
       World.remove(world, coin);
       coins = coins.filter(c => c !== coin);
-      if (coin.domElement && coin.domElement.parentNode) {
-        coin.domElement.parentNode.removeChild(coin.domElement);
-      }
+      if (coin.domElement && coin.domElement.parentNode) coin.domElement.parentNode.removeChild(coin.domElement);
       console.log("Coin collected! Total:", coinCount);
     }
     Events.on(engine, "collisionStart", function(event) {
@@ -889,7 +891,7 @@
       const offsetX = player.facing==="right" ? -15 : 15;
       const origin = { x: player.torso.position.x + offsetX, y: player.torso.position.y };
       const numPixels = 12;
-      for (let i=0;i<numPixels;i++){
+      for (let i=0; i<numPixels; i++){
         const pixel = document.createElement("div");
         pixel.className = "booster-pixel";
         pixel.style.left = origin.x + "px";
@@ -918,7 +920,7 @@
       engine.velocityIterations = 10;
       engine.constraintIterations = 4;
       
-      // --- Player One Movement, Jump & Slingshot ---
+      // --- Player One Movement, Jump, & Slingshot/Fast-Fall ---
       if (keys1["ArrowLeft"]) {
         playerChar1.facing = "left";
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: -0.01, y: 0 });
@@ -927,25 +929,30 @@
         playerChar1.facing = "right";
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: 0.01, y: 0 });
       }
-      // Jump: one–time impulse when Up (or W) is pressed and on ground.
+      // Jump: Apply a single impulse when Up (or W) is pressed and on ground.
       if ((keys1["ArrowUp"] || keys1["KeyW"]) && playerChar1.jumpReady && playerChar1.torso.position.y >= playAreaHeight-60) {
-        const jumpImpulse = 0.3; // Adjust for desired jump height.
+        const jumpImpulse = 0.3; // adjust as desired
         Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: 0, y: -jumpImpulse });
         playerChar1.jumpReady = false;
       }
       if (!(keys1["ArrowUp"] || keys1["KeyW"]) && playerChar1.torso.position.y >= playAreaHeight-60) {
         playerChar1.jumpReady = true;
       }
-      // Slingshot: Down (or S) charges up a force to launch the character.
+      // Slingshot / Fast-Fall for Player 1:
       if (keys1["ArrowDown"] || keys1["KeyS"]) {
-        playerChar1.slingCharge = (playerChar1.slingCharge || 0) + dt;
-        const maxSlingCharge = 2.0;
-        if (playerChar1.slingCharge > maxSlingCharge) playerChar1.slingCharge = maxSlingCharge;
+        // If airborne, apply fast-fall force.
+        if (playerChar1.torso.position.y < playAreaHeight-60) {
+          const fastFallForce = 0.02; // Adjust to force the character down quicker
+          Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: 0, y: fastFallForce });
+        } else {
+          // Otherwise (on ground), charge a slingshot impulse.
+          playerChar1.slingCharge = (playerChar1.slingCharge || 0) + dt;
+          const maxSlingCharge = 2.0;
+          if (playerChar1.slingCharge > maxSlingCharge) playerChar1.slingCharge = maxSlingCharge;
+        }
       }
-      // On release of Down, apply the slingshot impulse.
-      // (Handled in keyboard event listener below.)
       
-      // --- Player Two Movement & Jump (similar to Player One) ---
+      // --- Player Two Movement & Jump ---
       if (keys2["ArrowLeft"]) {
         playerChar2.facing = "left";
         Body.applyForce(playerChar2.torso, playerChar2.torso.position, { x: -0.01, y: 0 });
@@ -963,14 +970,15 @@
         playerChar2.jumpReady = true;
       }
       
-      // --- Air Steering (if not charging slingshot) ---
+      // --- Air Steering (only if not charging slingshot on P1) ---
       if (playerChar1.torso.position.y < playAreaHeight-30 && !(keys1["ArrowDown"] || keys1["KeyS"])) {
         let airInput = { x: 0, y: 0 };
         if (keys1["ArrowLeft"]) airInput.x -= 1;
         if (keys1["ArrowRight"]) airInput.x += 1;
         if (keys1["ArrowUp"]) airInput.y -= 1;
         let mag = Math.hypot(airInput.x, airInput.y);
-        if (mag > 0) { airInput.x /= mag; airInput.y /= mag;
+        if (mag>0) {
+          airInput.x /= mag; airInput.y /= mag;
           const airControlForce = 0.002;
           Body.applyForce(playerChar1.torso, playerChar1.torso.position, { x: airInput.x*airControlForce, y: airInput.y*airControlForce });
         }
@@ -981,13 +989,14 @@
         if (keys2["ArrowRight"]) airInput.x += 1;
         if (keys2["ArrowUp"]) airInput.y -= 1;
         let mag = Math.hypot(airInput.x, airInput.y);
-        if (mag > 0) { airInput.x /= mag; airInput.y /= mag;
+        if (mag>0) {
+          airInput.x /= mag; airInput.y /= mag;
           const airControlForce = 0.002;
           Body.applyForce(playerChar2.torso, playerChar2.torso.position, { x: airInput.x*airControlForce, y: airInput.y*airControlForce });
         }
       }
       
-      // --- Update DOM Positions, Held Object, Head sync, Clamping, Animation, etc.
+      // --- Update DOM Positions ---
       domEntities.forEach(body => {
         if (body.domElement) {
           body.domElement.style.left = body.position.x + "px";
@@ -1009,15 +1018,18 @@
           enemy.body.domElement.style.transform = "translate(-50%, -50%) rotate(" + enemy.body.angle + "rad)";
         }
       });
+      
       updateHeldObject(playerChar1, joystickAim1);
       updateHeldObject(playerChar2, joystickAim2);
-      Body.setPosition(playerChar1.head, { x: playerChar1.torso.position.x, y: playerChar1.torso.position.y-40 });
+      
+      // Sync head to torso.
+      Body.setPosition(playerChar1.head, { x: playerChar1.torso.position.x, y: playerChar1.torso.position.y - 40 });
       Body.setVelocity(playerChar1.head, playerChar1.torso.velocity);
-      Body.setPosition(playerChar2.head, { x: playerChar2.torso.position.x, y: playerChar2.torso.position.y-40 });
+      Body.setPosition(playerChar2.head, { x: playerChar2.torso.position.x, y: playerChar2.torso.position.y - 40 });
       Body.setVelocity(playerChar2.head, playerChar2.torso.velocity);
-      // Clamp players within play area (omitted for brevity, same as before)
-      // Walking animations (omitted for brevity)
-      // Update HP bars (omitted for brevity)
+      
+      // (Clamping players, walking animations, and HP bar updates omitted for brevity.)
+      
       checkEnemyOutOfBounds();
       updateCamera();
       requestAnimationFrame(update);
@@ -1034,40 +1046,42 @@
       const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
       const threshold = 0.2;
       for (let i=0; i<gamepads.length; i++){
-        const gp = gamepads[i]; if (!gp) continue;
-        if (gp.index===0) {
+        const gp = gamepads[i];
+        if (!gp) continue;
+        if (gp.index === 0) {
           if (gp.axes[0] < -threshold) { keys1["ArrowLeft"] = true; keys1["ArrowRight"] = false; }
           else if (gp.axes[0] > threshold) { keys1["ArrowRight"] = true; keys1["ArrowLeft"] = false; }
           else { keys1["ArrowLeft"] = keys1["ArrowRight"] = false; }
-          keys1["ArrowUp"] = false;
+          keys1["ArrowUp"] = false; // Jump via keyboard for now.
+          // Button 7 for grab/throw.
           const grabPressed = gp.buttons[7].pressed;
           const wasGrabPressed = lastGamepadButtonState[gp.index] ? lastGamepadButtonState[gp.index][7] : false;
           if (grabPressed && !wasGrabPressed) { grabStart(playerChar1, joystickAim1); }
           else if (!grabPressed && wasGrabPressed) { grabRelease(playerChar1, keys1, joystickAim1); }
           let rx = gp.axes[2], ry = gp.axes[3];
-          let rmag = Math.hypot(rx,ry);
+          let rmag = Math.hypot(rx, ry);
           if (rmag > threshold) { joystickAim1.x = rx/rmag; joystickAim1.y = ry/rmag; }
           else { joystickAim1.x = joystickAim1.y = 0; }
           if (!lastGamepadButtonState[gp.index]) lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
           const meleePressed = (gp.buttons[2].pressed || gp.buttons[6].pressed);
           const meleeWasPressed = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
           if (meleePressed && !meleeWasPressed) { meleeAttack(playerChar1, keys1, joystickAim1); }
-          lastGamepadButtonState[gp.index] = gp.buttons.map(b=>b.pressed);
-        } else if (gp.index===1) {
+          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
+        } else if (gp.index === 1) {
           if (gp.axes[0] < -threshold) { keys2["ArrowLeft"] = true; keys2["ArrowRight"] = false; }
           else if (gp.axes[0] > threshold) { keys2["ArrowRight"] = true; keys2["ArrowLeft"] = false; }
           else { keys2["ArrowLeft"] = keys2["ArrowRight"] = false; }
           keys2["ArrowUp"] = false;
           keys2["Space"] = (gp.buttons[0].pressed || gp.buttons[11].pressed);
           let rx = gp.axes[2], ry = gp.axes[3];
-          let rmag = Math.hypot(rx,ry);
+          let rmag = Math.hypot(rx, ry);
           if (rmag > threshold) { joystickAim2.x = rx/rmag; joystickAim2.y = ry/rmag; }
           else { joystickAim2.x = joystickAim2.y = 0; }
           if (!lastGamepadButtonState[gp.index]) lastGamepadButtonState[gp.index] = new Array(gp.buttons.length).fill(false);
           const meleePressed2 = (gp.buttons[2].pressed || gp.buttons[6].pressed);
           const meleeWasPressed2 = (lastGamepadButtonState[gp.index][2] || lastGamepadButtonState[gp.index][6]);
           if (meleePressed2 && !meleeWasPressed2) { meleeAttack(playerChar2, keys2, joystickAim2); }
-          lastGamepadButtonState[gp.index] = gp.buttons.map(b=>b.pressed);
+          lastGamepadButtonState[gp.index] = gp.buttons.map(b => b.pressed);
         }
       }
     }
@@ -1081,7 +1095,7 @@
       if (key==='ArrowLeft' || key==='KeyA') { keys1["ArrowLeft"] = true; }
       if (key==='ArrowRight' || key==='KeyD') { keys1["ArrowRight"] = true; }
       if (key==='ArrowDown' || key==='KeyS') { keys1["ArrowDown"] = true; }
-      // Spacebar triggers melee attack
+      // Spacebar triggers melee attack.
       if (key===' ') { meleeAttack(playerChar1, keys1, joystickAim1); }
     });
     document.addEventListener('keyup', e => {
@@ -1090,8 +1104,8 @@
       if (key==='ArrowLeft' || key==='KeyA') { keys1["ArrowLeft"] = false; }
       if (key==='ArrowRight' || key==='KeyD') { keys1["ArrowRight"] = false; }
       if (key==='ArrowDown' || key==='KeyS') {
-        // On keyup, if there is a slingshot charge, apply the force.
-        if (playerChar1.slingCharge && playerChar1.slingCharge > 0) {
+        // On keyup, if on ground and charge exists, fire slingshot impulse.
+        if (playerChar1.torso.position.y >= playAreaHeight-60 && playerChar1.slingCharge && playerChar1.slingCharge > 0) {
           const baseSlingForce = 0.05;
           const forceMagnitude = playerChar1.slingCharge * baseSlingForce;
           let aim = { x: joystickAim1.x, y: joystickAim1.y };
@@ -1103,8 +1117,8 @@
       }
     });
     // Mouse: Left-click for grab/hold.
-    document.addEventListener('mousedown', e => { if (e.button===0) { grabStart(playerChar1, joystickAim1); } });
-    document.addEventListener('mouseup', e => { if (e.button===0) { grabRelease(playerChar1, keys1, joystickAim1); } });
+    document.addEventListener('mousedown', e => { if(e.button===0) { grabStart(playerChar1, joystickAim1); } });
+    document.addEventListener('mouseup', e => { if(e.button===0) { grabRelease(playerChar1, keys1, joystickAim1); } });
     document.addEventListener('mousemove', e => {
       const rect = game.getBoundingClientRect();
       const scale = window.currentScale || 1;
@@ -1112,8 +1126,8 @@
       const mouseY = (e.clientY - rect.top)/scale + cameraY;
       const dx = mouseX - playerChar1.torso.position.x;
       const dy = mouseY - playerChar1.torso.position.y;
-      const mag = Math.hypot(dx,dy);
-      if (mag>0) { joystickAim1.x = dx/mag; joystickAim1.y = dy/mag; }
+      const mag = Math.hypot(dx, dy);
+      if (mag > 0) { joystickAim1.x = dx/mag; joystickAim1.y = dy/mag; }
       else { joystickAim1.x = joystickAim1.y = 0; }
     });
     
