@@ -666,6 +666,57 @@ function updateHeldObject(player, joystickAim) {
     Body.setPosition(player.heldObject, { x: targetX, y: targetY });
   }
 }
+// In your main update loop (after processing input and before calling updateHeldObject):
+
+// Compute aim angle from joystick/mouse for player 1 (and similarly for player 2)
+function updateHandOrientation(player, joystickAim) {
+  // Only update if the aim vector is nonzero; otherwise, default to 0 (or face forward)
+  if (Math.hypot(joystickAim.x, joystickAim.y) > 0.1) {
+    let aimAngle = Math.atan2(joystickAim.y, joystickAim.x);
+    // Set both hands to this angle (you might want to add an offset for left/right if needed)
+    Body.setAngle(player.leftHand, aimAngle);
+    Body.setAngle(player.rightHand, aimAngle);
+  }
+}
+
+// Auto-grab check: if an enemy is within a given reach of either hand along the aim direction, call grabStart.
+function autoGrabIfInRange(player, joystickAim) {
+  // Only proceed if an object is not already held.
+  if (player.heldObject) return;
+  
+  // Define a threshold distance (e.g., 50 pixels) within which the enemy must be from a hand.
+  const reachThreshold = 50;
+  
+  // Check each hand’s position.
+  let hands = [player.leftHand, player.rightHand];
+  let bodies = Composite.allBodies(world);
+  for (let hand of hands) {
+    // For each candidate body in the world...
+    for (let body of bodies) {
+      // Skip static bodies, player's own parts, bullets, and goal sensors.
+      if (body.isStatic || body.character || body.label === "bullet" ||
+          body.label === "leftGoal" || body.label === "rightGoal") continue;
+      // Only consider enemy objects (or adjust if you want to grab other items).
+      if (body.label !== "enemy") continue;
+      // Compute distance from hand to candidate.
+      const dx = body.position.x - hand.position.x;
+      const dy = body.position.y - hand.position.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < reachThreshold) {
+        console.log("Auto-grab candidate found at distance:", dist);
+        // Call grabStart (this function will attach both hands if the candidate is an enemy).
+        grabStart(player, joystickAim);
+        return; // Only grab one candidate.
+      }
+    }
+  }
+}
+
+// Then in your update loop for player 1 (and similarly for player 2):
+updateHandOrientation(playerChar1, joystickAim1);
+autoGrabIfInRange(playerChar1, joystickAim1);
+
+// (Rest of your update loop code follows…)
 
 
     /* --- Melee Attack Function --- */
