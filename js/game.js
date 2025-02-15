@@ -2,13 +2,14 @@
 import { world, engine, createDomElement } from "./engine.js";
 import { LEVEL_WIDTH, GROUND_EXTRA_HEIGHT } from "./config.js";
 import { triggerScreenshake, updateScoreboard } from "./ui.js";
-import { Body, World, Composite } from "matter-js";
+import { Body, World, Composite, Bodies } from "matter-js";
 
-// Arrays to hold game entities
+// Array for storing enemies
 export const enemies = [];
 
-// --- Level and Entity Creation Functions ---
-
+/* ---------------------------
+   Level & Entity Creation
+--------------------------- */
 export function createPlatform(x, y, width, height) {
   const slope = Math.random() * 0.4 + 0.3;
   const options = { isStatic: true, label: "platform", density: 0.01 };
@@ -80,7 +81,6 @@ export function createWall(x, y, width, height) {
 export function createGoalDom(goalBody, cls) {
   const el = document.createElement("div");
   el.className = "goal " + cls;
-  // Assume goalBody has width and height properties set
   el.style.width = goalBody.width + "px";
   el.style.height = goalBody.height + "px";
   el.style.left = (goalBody.position.x - goalBody.width / 2) + "px";
@@ -89,21 +89,71 @@ export function createGoalDom(goalBody, cls) {
   goalBody.domElement = el;
 }
 
+/* ---------------------------
+   Character Creation
+--------------------------- */
 export function createCharacter(x, y) {
-  // Create a character object with parts.
   const character = { hp: 100, spawn: { x, y }, heldObject: null, isDying: false, facing: "right" };
   const size = 20;
-  // Create parts using Matter.Bodies (this is a simplified example)
-  const head = Bodies.circle(x, y - 40, size / 2);
-  const torso = Bodies.circle(x, y - 20, size);
-  // (Create arms, legs, etc., and add them to the world)
-  World.add(world, [head, torso]);
+  // Create parts
+  const head = Bodies.circle(x, y - 40, size / 2, { friction: 0.5, restitution: 0 });
+  const torso = Bodies.circle(x, y - 20, size, { friction: 6.0, frictionAir: 0.11, restitution: 0 });
+  const rightUpperArm = Bodies.circle(x + 30, y - 20, size / 2, { friction: 0.5, restitution: 0 });
+  const rightHand = Bodies.circle(x + 30, y, size / 2, { friction: 0.5, restitution: 0 });
+  const leftUpperArm = Bodies.circle(x - 30, y - 20, size / 2, { friction: 0.5, restitution: 0 });
+  const leftHand = Bodies.circle(x - 30, y, size / 2, { friction: 0.5, restitution: 0 });
+  const rightUpperLeg = Bodies.circle(x + 10, y + 10, size / 2, { friction: 0.5, restitution: 0 });
+  const rightFoot = Bodies.circle(x + 10, y + 30, size / 2, { friction: 0.5, restitution: 0 });
+  const leftUpperLeg = Bodies.circle(x - 10, y + 10, size / 2, { friction: 0.5, restitution: 0 });
+  const leftFoot = Bodies.circle(x - 10, y + 30, size / 2, { friction: 0.5, restitution: 0 });
+  
+  World.add(world, [head, torso, rightUpperArm, rightHand, leftUpperArm, leftHand, rightUpperLeg, rightFoot, leftUpperLeg, leftFoot]);
+  
+  // Link parts using constraints
+  const link = (a, b, offsetA, offsetB) => {
+    const con = Matter.Constraint.create({
+      bodyA: a, pointA: offsetA, bodyB: b, pointB: offsetB, stiffness: 1, length: 0.1
+    });
+    World.add(world, con);
+  };
+  
+  link(head, torso, { x: 0, y: size / 2 }, { x: 0, y: -size });
+  link(torso, rightUpperArm, { x: size, y: 0 }, { x: 0, y: 0 });
+  link(rightUpperArm, rightHand, { x: 0, y: 0 }, { x: 0, y: -20 });
+  link(torso, leftUpperArm, { x: -size, y: 0 }, { x: 0, y: 0 });
+  link(leftUpperArm, leftHand, { x: 0, y: 0 }, { x: 0, y: -20 });
+  link(torso, rightUpperLeg, { x: 10, y: size }, { x: 0, y: -size / 2 });
+  link(rightUpperLeg, rightFoot, { x: 0, y: 0 }, { x: 0, y: -20 });
+  link(torso, leftUpperLeg, { x: -10, y: size }, { x: 0, y: -size / 2 });
+  link(leftUpperLeg, leftFoot, { x: 0, y: 0 }, { x: 0, y: -20 });
+  
   character.head = head;
   character.torso = torso;
-  // In your full version, include arms, hands, legs, feet, and link them with Constraints.
+  character.rightUpperArm = rightUpperArm;
+  character.rightHand = rightHand;
+  character.leftUpperArm = leftUpperArm;
+  character.leftHand = leftHand;
+  character.rightUpperLeg = rightUpperLeg;
+  character.rightFoot = rightFoot;
+  character.leftUpperLeg = leftUpperLeg;
+  character.leftFoot = leftFoot;
+  
+  // Create a simple HP bar DOM element
+  const hpContainer = document.createElement("div");
+  hpContainer.className = "hp-bar-container";
+  const hpBar = document.createElement("div");
+  hpBar.className = "hp-bar";
+  hpContainer.appendChild(hpBar);
+  document.getElementById("game").appendChild(hpContainer);
+  character.hpContainer = hpContainer;
+  character.hpBar = hpBar;
+  
   return character;
 }
 
+/* ---------------------------
+   Enemy Creation
+--------------------------- */
 export function createEnemy(x, y) {
   const enemy = { hp: 50, state: "patrol", direction: Math.random() < 0.5 ? -1 : 1 };
   enemy.body = Bodies.circle(x, y, 20, { friction: 0.5, frictionAir: 0.05, restitution: 1.0, label: "enemy", isBullet: true });
@@ -113,7 +163,6 @@ export function createEnemy(x, y) {
   overlay.classList.add("enemy-overlay");
   enemy.body.domElement.appendChild(overlay);
   enemy.update = function() {
-    // Simple AI: chase the closer player.
     const p1 = window.playerChar1, p2 = window.playerChar2;
     const dist1 = Math.hypot(p1.torso.position.x - enemy.body.position.x, p1.torso.position.y - enemy.body.position.y);
     const dist2 = Math.hypot(p2.torso.position.x - enemy.body.position.x, p2.torso.position.y - enemy.body.position.y);
@@ -138,11 +187,13 @@ export function createEnemy(x, y) {
   return enemy;
 }
 
-// --- Grab/Throw Functions ---
+/* ---------------------------
+   Grab/Throw & Melee Functions
+--------------------------- */
 export function grabStart(player, joystickAim) {
   if (!player.heldObject) {
     const grabRange = 1000;
-    const handPos = (player.facing === "left") 
+    const handPos = (player.facing === "left")
       ? (player.leftHand ? player.leftHand.position : player.torso.position)
       : (player.rightHand ? player.rightHand.position : player.torso.position);
     const bodies = Composite.allBodies(world);
@@ -204,7 +255,6 @@ export function updateHeldObject(player, joystickAim) {
   }
 }
 
-// --- Melee Attack (simplified sample) ---
 export function meleeAttack(player, keys, joystickAim) {
   let inputDir = { x: 0, y: 0 };
   if (keys["ArrowLeft"]) inputDir.x -= 1;
@@ -217,11 +267,13 @@ export function meleeAttack(player, keys, joystickAim) {
   }
   const mag = Math.hypot(inputDir.x, inputDir.y);
   const attackDir = mag > 0 ? { x: inputDir.x / mag, y: inputDir.y / mag } : { x: 0, y: -1 };
-  // (Apply forces to perform melee attack, damage objects, etc.)
+  // For simplicity, we simply trigger a screen shake.
   triggerScreenshake();
 }
 
-// --- Check Enemies Out of Bounds ---
+/* ---------------------------
+   Out-of-Bounds and Destruction
+--------------------------- */
 export function checkEnemyOutOfBounds() {
   enemies.slice().forEach(enemy => {
     const pos = enemy.body.position;
@@ -237,9 +289,6 @@ export function checkEnemyOutOfBounds() {
   });
 }
 
-// --- New Functions to Fix Errors ---
-
-// respawnPlayer: Removes all parts of a player so that it can be recreated.
 export function respawnPlayer(player) {
   const parts = [player.head, player.torso, player.rightUpperArm, player.rightHand,
                  player.leftUpperArm, player.leftHand, player.rightUpperLeg, player.rightFoot,
@@ -255,44 +304,28 @@ export function respawnPlayer(player) {
   }
 }
 
-// damageDestructible: Decreases the hp of a destructible object, plays effects, and removes it when hp <= 0.
 export function damageDestructible(obj, damage) {
   if (typeof obj.hp !== "number") return;
   obj.hp -= damage;
-  // If you have a particleBurst function, call it:
-  if (typeof particleBurst === "function") {
-    particleBurst(obj.position.x, obj.position.y, "orange");
-  }
+  particleBurst(obj.position.x, obj.position.y, "orange");
   if (obj.hp <= 0) {
-    if (typeof particleBurst === "function") {
-      particleBurst(obj.position.x, obj.position.y, "red");
-    }
-    if (obj.label === "wall") {
-      // breakWall(obj);
-    } else if (obj.label === "platform") {
-      // breakBoulder(obj);
-    } else {
-      World.remove(world, obj);
-      if (obj.domElement && obj.domElement.parentNode) {
-        obj.domElement.parentNode.removeChild(obj.domElement);
-      }
-      // Remove from arrays if needed.
+    particleBurst(obj.position.x, obj.position.y, "red");
+    World.remove(world, obj);
+    if (obj.domElement && obj.domElement.parentNode) {
+      obj.domElement.parentNode.removeChild(obj.domElement);
     }
   }
 }
 
-// Helper to remove an enemy.
 export function removeEnemy(enemyBody) {
   World.remove(world, enemyBody);
   if (enemyBody.domElement && enemyBody.domElement.parentNode) {
     enemyBody.domElement.parentNode.removeChild(enemyBody.domElement);
   }
-  // Remove from the enemies array.
   const index = enemies.findIndex(e => e.body === enemyBody);
   if (index !== -1) enemies.splice(index, 1);
 }
 
-// A sample triggerOutEffect function.
 function triggerOutEffect() {
   const outText = document.createElement("div");
   outText.id = "outText";
@@ -308,14 +341,42 @@ function triggerOutEffect() {
   outText.style.zIndex = "60";
   outText.style.pointerEvents = "none";
   document.getElementById("game").appendChild(outText);
-  // Shake the screen.
   triggerScreenshake();
   outText.classList.add("goalTextAnimation");
   setTimeout(() => {
-    if (outText.parentNode) {
-      outText.parentNode.removeChild(outText);
-    }
+    if (outText.parentNode) outText.parentNode.removeChild(outText);
   }, 1000);
 }
 
-// You may add additional functions such as digitalPixelExplosion, breakWall, breakBoulder, etc.
+// Example particleBurst function (complete implementation)
+export function particleBurst(x, y, color) {
+  const numParticles = 20;
+  const gameEl = document.getElementById("game");
+  for (let i = 0; i < numParticles; i++) {
+    const particle = document.createElement("div");
+    particle.style.position = "absolute";
+    particle.style.left = x + "px";
+    particle.style.top = y + "px";
+    particle.style.width = "4px";
+    particle.style.height = "4px";
+    particle.style.backgroundColor = color;
+    particle.style.borderRadius = "50%";
+    particle.style.pointerEvents = "none";
+    particle.style.opacity = "1";
+    particle.style.transform = "translate(-50%, -50%)";
+    gameEl.appendChild(particle);
+    const angle = Math.random() * 2 * Math.PI;
+    const distance = Math.random() * 50 + 20;
+    const deltaX = Math.cos(angle) * distance;
+    const deltaY = Math.sin(angle) * distance;
+    particle.animate([
+      { transform: "translate(0,0)", opacity: 1 },
+      { transform: `translate(${deltaX}px, ${deltaY}px)`, opacity: 0 }
+    ], {
+      duration: 800 + Math.random() * 400,
+      easing: "ease-out",
+      fill: "forwards"
+    });
+    setTimeout(() => { if (particle.parentNode) gameEl.removeChild(particle); }, 1200);
+  }
+}
