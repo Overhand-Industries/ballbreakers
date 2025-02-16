@@ -1500,7 +1500,7 @@
         if (key === 'ArrowLeft' || key === 'KeyA') { keys1["ArrowLeft"] = true; }
         if (key === 'ArrowRight' || key === 'KeyD') { keys1["ArrowRight"] = true; }
         if (key === 'ArrowDown' || key === 'KeyS') { keys1["ArrowDown"] = true; }
-        if (key === ' ') { meleeAttack(playerChar1, keys1, joystickAim1); }
+        if (key === 'Space') { meleeAttack(playerChar1, keys1, joystickAim1); }
       });
       document.addEventListener('keyup', (e) => {
         const key = e.code;
