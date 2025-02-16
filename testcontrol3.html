@@ -978,7 +978,64 @@
           });
         }, 100);
       }
-      
+      function triggerDeathEffect() {
+  // Create a KO overlay
+  const koText = document.createElement("div");
+  koText.innerText = "KO";
+  koText.style.position = "absolute";
+  koText.style.top = "50%";
+  koText.style.left = "50%";
+  koText.style.transform = "translate(-50%, -50%)";
+  koText.style.fontSize = "72px";
+  koText.style.fontWeight = "bold";
+  koText.style.fontFamily = '"Impact", "Arial Black", sans-serif';
+  koText.style.color = "red";
+  koText.style.zIndex = "60";
+  koText.style.pointerEvents = "none";
+  game.appendChild(koText);
+  
+  // Animate the KO effect
+  koText.animate([
+    { opacity: 1, transform: "translate(-50%, -50%) scale(1.5)" },
+    { opacity: 0, transform: "translate(-50%, -50%) scale(1)" }
+  ], {
+    duration: 1000,
+    easing: "ease-out",
+    fill: "forwards"
+  });
+  
+  setTimeout(() => {
+    if (koText.parentNode) {
+      koText.parentNode.removeChild(koText);
+    }
+  }, 1000);
+}
+function damageDestructible(obj, damage) {
+  // Only process objects with a numerical hp property
+  if (typeof obj.hp !== "number") return;
+  
+  obj.hp -= damage;
+  
+  // Optionally, show a particle burst here
+  // particleBurst(obj.position.x, obj.position.y, "orange");
+
+  if (obj.hp <= 0) {
+    // Optionally, trigger a different effect when the object breaks
+    // particleBurst(obj.position.x, obj.position.y, "red");
+    
+    // Remove the object from the world and from the DOM
+    World.remove(world, obj);
+    if (obj.domElement && obj.domElement.parentNode) {
+      obj.domElement.parentNode.removeChild(obj.domElement);
+    }
+    
+    // If this object is an enemy, also remove it from your enemies array
+    if (obj.label === "enemy") {
+      enemies = enemies.filter(e => e.body !== obj);
+    }
+  }
+}
+
       function digitalPixelExplosion(x, y) {
         triggerScreenshake();
         const numPixels = 50;
