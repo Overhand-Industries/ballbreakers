@@ -1497,7 +1497,32 @@ function damageDestructible(obj, damage) {
           const hpPercentage = Math.max(0, character.hp) / fullHP;
           character.hpBar.style.width = (hpPercentage * containerWidth) + "px";
         })(playerChar2);
-      
+        
+        // Death check for Player 1
+  if (playerChar1.hp <= 0 && !playerChar1.isDying) {
+    playerChar1.isDying = true;
+    setTimeout(() => { 
+      digitalPixelExplosion(playerChar1.torso.position.x, playerChar1.torso.position.y);
+      triggerScreenshake();
+      triggerDeathEffect();  
+      respawnPlayer(playerChar1);
+      playerChar1 = createCharacter(playerChar1.spawn.x, playerChar1.spawn.y);
+      addPlayerClass(playerChar1, "player1");
+    }, 1000);
+  }
+
+  // **Death check for Player 2 (ensured inside update loop)**
+  if (playerChar2.hp <= 0 && !playerChar2.isDying) {
+    playerChar2.isDying = true;
+    setTimeout(() => {
+      digitalPixelExplosion(playerChar2.torso.position.x, playerChar2.torso.position.y);
+      triggerScreenshake();
+      triggerDeathEffect();  
+      respawnPlayer(playerChar2);
+      playerChar2 = createCharacter(playerChar2.spawn.x, playerChar2.spawn.y);
+      addPlayerClass(playerChar2, "player2");
+    }, 1000);
+  }
         // --- Call enemy out-of-bounds check ---
         checkEnemyOutOfBounds();
         updateCamera();
