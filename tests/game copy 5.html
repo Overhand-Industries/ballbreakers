@@ -727,7 +727,7 @@
         
         // Terrain parameters
         const terrainSize = 5500;
-        const resolution = 500;
+        const resolution = 50;
         const heightScale = 80; // Increased for more dramatic height variation
         const noiseScale = 0.05; // Slightly increased for more varied features
         
@@ -1002,7 +1002,7 @@
       // Simplify the createGrassGround method to just create a nice green ground
       createGrassGround() {
         const terrainSize = 5500;
-        const resolution = 500;
+        const resolution = 50;
         
         // Create a ground plane to hold the grass
         const groundGeometry = new THREE.PlaneGeometry(terrainSize, terrainSize, resolution-1, resolution-1);
