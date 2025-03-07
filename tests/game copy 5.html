@@ -149,7 +149,7 @@
         
         // Create game elements
         this.createSkybox();
-        this.createClouds();
+        this.create();
         this.createAirship();
         this.createEnemyAirship(); // Add enemy ship
         
@@ -267,7 +267,7 @@
       }
       
       createSkybox() {
-        const skyGeometry = new THREE.BoxGeometry(1000, 1000, 1000);
+        const skyGeometry = new THREE.BoxGeometry(5000, 5000, 5000);
         const skyMaterial = new THREE.MeshBasicMaterial({
           color: 0x87ceeb,
           side: THREE.BackSide,
@@ -276,11 +276,11 @@
         this.scene.add(skybox);
       }
       
-      createClouds() {
-        this.clouds = new THREE.Group();
-        this.scene.add(this.clouds);
+      create() {
+        this. = new THREE.Group();
+        this.scene.add(this.);
         
-        // Create distant billboard clouds
+        // Create distant billboard 
         const numBillboardClouds = 8;
         for (let layer = 0; layer < 4; layer++) {
           for (let i = 0; i < numBillboardClouds; i++) {
@@ -317,7 +317,7 @@
           const cloud = this.createFogCloud();
           
           // Position closer to center
-          const radius = 150 + Math.random() * 150;
+          const radius = 2150 + Math.random() * 150;
           const angle = Math.random() * Math.PI * 2;
           
           cloud.position.set(
