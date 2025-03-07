@@ -3038,3 +3038,2644 @@
   </script>
 </body>
 </html> 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skies of Arcadia Airship Simulator</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+    #instructions {
+      position: fixed;
+      left: 10px;
+      top: 10px;
+      background: rgba(0, 0, 0, 0.5);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      max-width: 250px;
+    }
+  </style>
+</head>
+<body>
+  <div id="instructions">
+    <h3>Controls:</h3>
+    <p>W/S: Move forward/backward</p>
+    <p>A/D: Turn left/right</p>
+    <p>Q/E: Strafe left/right</p>
+    <p>Space: Ascend (can be used while moving)</p>
+    <p>Shift: Descend (can be used while moving)</p>
+    <p>F: Toggle camera view</p>
+    <p>Left Click: Fire cannons (works in all camera modes)</p>
+    <p><small>Check the console (F12) for loading messages</small></p>
+  </div>
+  
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  
+  <script type="module">
+    import * as THREE from 'three';
+    // Simpler noise function instead of importing SimplexNoise, which might not be working
+    
+    // Main Game Class
+    class AirshipGame {
+      constructor() {
+        console.log("Initializing Airship Simulator...");
+        
+        // NEW: Use cloud/fog ground instead of grass ground (set to true for clouds)
+        this.useCloudFogGround = true;
+        
+        // Add cloud textures
+        this.cloudTextures = [
+          'https://mrdoob.com/lab/javascript/webgl/clouds/cloud10.png',
+          'https://mrdoob.com/lab/javascript/webgl/clouds/cloud11.png',
+          'https://mrdoob.com/lab/javascript/webgl/clouds/cloud12.png',
+          'https://mrdoob.com/lab/javascript/webgl/clouds/cloud13.png',
+          'https://mrdoob.com/lab/javascript/webgl/clouds/cloud14.png',
+          'https://mrdoob.com/lab/javascript/webgl/clouds/cloud15.png'
+        ];
+        
+        // Add player health and respawn properties
+        this.playerHealth = 150;
+        this.maxPlayerHealth = 150;
+        this.isPlayerDead = false;
+        this.respawnCooldown = 3000; // 3 seconds
+        this.lastDeathTime = 0;
+        this.respawnPosition = new THREE.Vector3(0, 50, 0);
+        
+        // Add health display
+        this.createHealthDisplay();
+        
+        // Scene setup
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x87CEEB);
+        
+        // Add auto-focus properties
+        this.lockedEnemy = null;
+        this.lockRange = 150; // Range at which enemies can be locked
+        this.lockIndicator = null;
+        this.createLockIndicator();
+        
+        // Camera setup
+        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        this.camera.position.set(0, 5, -10);
+        this.camera.lookAt(0, 0, 0);
+        
+        // Renderer setup
+        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.shadowMap.enabled = true;
+        document.body.appendChild(this.renderer.domElement);
+        
+        // Add enemy ship management
+        this.enemies = [];
+        this.enemyHealth = new Map();
+        
+        // Physics properties
+        this.gravity = 0.02;
+        this.collisionResponse = 0.5;
+        this.minAltitude = 10; // Increased minimum altitude
+        this.maxAltitude = 200; // Maximum flying altitude
+        this.hardDeckLimit = 5; // Absolute minimum height above terrain
+        this.collisionOccurred = false;
+        this.collisionCooldown = 0;
+        
+        // Enhanced flight physics
+        this.antigravActive = true;
+        this.hoverHeight = 50; // Start higher
+        this.antigravStrength = 0.015;
+        this.hoverStability = 0.98;
+        this.enginePower = 0.08;
+        this.verticalSpeed = 0.5; // Speed of ascent/descent
+        this.lateralDrag = 0.98;
+        this.verticalDrag = 0.96;
+        this.turnInertia = 0.85;
+        this.bankingFactor = 0.05;
+        this.verticalDampening = 0.92;
+        this.heightChangeSpeed = 0.8;
+        this.engineSoundEnabled = false;
+        this.engineSoundIntensity = 0;
+        this.windEffect = 0.0005;
+        
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        this.scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        directionalLight.position.set(10, 100, 10);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.shadow.camera.near = 0.5;
+        directionalLight.shadow.camera.far = 500;
+        this.scene.add(directionalLight);
+        
+        // Camera modes
+        this.cameraMode = 'follow'; // 'follow', 'overhead', or 'orbit'
+        this.orbitDistance = 15;
+        this.orbitHeight = 5;
+        this.orbitAngleHorizontal = 0;
+        this.orbitAngleVertical = 0;
+        this.isMouseDown = false;
+        this.lastMouseX = 0;
+        this.lastMouseY = 0;
+        this.mouseSensitivity = 0.005;
+        
+        // Create game elements
+        this.createSkybox();
+        this.createClouds();
+        this.createAirship();
+        this.createEnemyAirship(); // Add enemy ship
+        
+        console.log("Creating terrain...");
+        this.createLIDARTerrain();
+        console.log("Adding grass...");
+        // Instead of calling createGrassGround(), we conditionally choose:
+        if (this.useCloudFogGround) {
+          this.createCloudFogLayer();
+        } else {
+          this.createGrassGround();
+        }
+        console.log("Terrain created!");
+        
+        // Position the airship higher to see terrain better
+        this.airship.position.set(0, 50, 0);
+        
+        // Input management
+        this.keys = {};
+        window.addEventListener('keydown', (e) => {
+          this.keys[e.key.toLowerCase()] = true;
+          
+          // Toggle camera view with 'f' key
+          if (e.key.toLowerCase() === 'f') {
+            if (this.cameraMode === 'follow') {
+              this.cameraMode = 'orbit';
+              // Initialize orbit angles based on current camera position
+              const toCamera = new THREE.Vector3().subVectors(this.camera.position, this.airship.position);
+              this.orbitAngleHorizontal = Math.atan2(toCamera.x, toCamera.z);
+              this.orbitAngleVertical = Math.asin(toCamera.y / toCamera.length());
+              this.orbitDistance = toCamera.length();
+              console.log("Camera mode: Orbit (Use mouse to look around)");
+            } else if (this.cameraMode === 'orbit') {
+              this.cameraMode = 'overhead';
+              console.log("Camera mode: Overhead");
+            } else {
+              this.cameraMode = 'follow';
+              // Reset camera to follow position behind ship
+              const behindShip = new THREE.Vector3(0, 5, -15);
+              behindShip.applyQuaternion(this.airship.quaternion);
+              this.camera.position.copy(this.airship.position).add(behindShip);
+              this.camera.lookAt(this.airship.position);
+              console.log("Camera mode: Follow");
+            }
+          }
+        });
+        window.addEventListener('keyup', (e) => this.keys[e.key.toLowerCase()] = false);
+        
+        // Resize handler
+        window.addEventListener('resize', () => this.handleResize());
+        
+        // Game state
+        this.velocity = new THREE.Vector3();
+        this.rotation = new THREE.Vector3();
+        
+        // Animation clock
+        this.clock = new THREE.Clock();
+        
+        // Add a simple noise generator
+        this.noise = {
+          // Simple 2D noise function
+          noise2D: (x, z) => {
+            const X = Math.floor(x);
+            const Z = Math.floor(z);
+            
+            // Simple hash function
+            const hash = (n) => Math.sin(n) * 43758.5453123;
+            
+            const dot = (i, j) => hash(X * 12.9898 + Z * 78.233 + i * 137.119 + j * 269.477);
+            
+            // Get corners
+            const n00 = dot(0, 0);
+            const n01 = dot(0, 1);
+            const n10 = dot(1, 0);
+            const n11 = dot(1, 1);
+            
+            // Smooth interpolation
+            const u = x - X;
+            const v = z - Z;
+            const u2 = (3.0 - 2.0 * u) * u * u;
+            const v2 = (3.0 - 2.0 * v) * v * v;
+            
+            return 0.5 * (
+              n00 * (1 - u2) * (1 - v2) +
+              n10 * u2 * (1 - v2) +
+              n01 * (1 - u2) * v2 +
+              n11 * u2 * v2
+            ) + 0.5;
+          }
+        };
+        
+        // Add mouse event listeners
+        window.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+        window.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+        window.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        window.addEventListener('wheel', (e) => this.handleMouseWheel(e));
+        
+        // Add projectile management
+        this.projectiles = [];
+        this.cannonCooldown = 0;
+        this.cannonCooldownTime = 20; // Frames between shots
+        
+        // Add mouse click listener for firing
+        window.addEventListener('click', () => this.fireCannons());
+        
+        // Add crosshair
+        this.createCrosshair();
+        
+        // Add targeting system
+        this.targetPoint = new THREE.Vector3();
+        this.canFireCannons = false;
+        
+        // Prevent right-click menu
+        window.addEventListener('contextmenu', (e) => e.preventDefault());
+        
+        // Start animation loop
+        this.animate();
+        
+        console.log("Airship Simulator ready! Use WASD to move, Space/Shift for up/down, F to toggle camera.");
+      }
+      
+      createSkybox() {
+        const skyGeometry = new THREE.BoxGeometry(1000, 1000, 1000);
+        const skyMaterial = new THREE.MeshBasicMaterial({
+          color: 0x87ceeb,
+          side: THREE.BackSide,
+        });
+        const skybox = new THREE.Mesh(skyGeometry, skyMaterial);
+        this.scene.add(skybox);
+      }
+      
+      createClouds() {
+        this.clouds = new THREE.Group();
+        this.scene.add(this.clouds);
+        
+        // Create distant billboard clouds
+        const numBillboardClouds = 8;
+        for (let layer = 0; layer < 4; layer++) {
+          for (let i = 0; i < numBillboardClouds; i++) {
+            const cloud = this.createBillboardCloud(layer);
+            
+            // Position in a circle around the center
+            const radius = 400 + Math.random() * 200;
+            const angle = (i / numBillboardClouds) * Math.PI * 2 + Math.random() * 0.5;
+            
+            cloud.position.set(
+              Math.cos(angle) * radius,
+              40 + layer * 30 + Math.random() * 20,
+              Math.sin(angle) * radius
+            );
+            
+            // Make cloud face center
+            cloud.lookAt(0, cloud.position.y, 0);
+            
+            cloud.userData = {
+              type: 'billboard',
+              angle: angle,
+              radius: radius,
+              speed: 0.0005 + Math.random() * 0.0005,
+              timeOffset: Math.random() * Math.PI * 2
+            };
+            
+            this.clouds.add(cloud);
+          }
+        }
+        
+        // Create volumetric fog clouds
+        const numFogClouds = 12;
+        for (let i = 0; i < numFogClouds; i++) {
+          const cloud = this.createFogCloud();
+          
+          // Position closer to center
+          const radius = 150 + Math.random() * 150;
+          const angle = Math.random() * Math.PI * 2;
+          
+          cloud.position.set(
+            Math.cos(angle) * radius,
+            30 + Math.random() * 40,
+            Math.sin(angle) * radius
+          );
+          
+          cloud.userData = {
+            type: 'fog',
+            originalY: cloud.position.y,
+            timeOffset: Math.random() * Math.PI * 2
+          };
+          
+          this.clouds.add(cloud);
+        }
+      }
+      
+      createBillboardCloud(layer) {
+        const group = new THREE.Group();
+        const textureLoader = new THREE.TextureLoader();
+        
+        // Create 3-5 overlapping planes for each cloud
+        const numPlanes = 3 + Math.floor(Math.random() * 2);
+        
+        for (let i = 0; i < numPlanes; i++) {
+          const texture = textureLoader.load(this.cloudTextures[Math.floor(Math.random() * this.cloudTextures.length)]);
+          const size = 30 + Math.random() * 20;
+          
+          const geometry = new THREE.PlaneGeometry(size, size);
+          const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            opacity: 0.7 - (layer * 0.1),
+            depthWrite: false,
+            depthTest: true,
+            alphaTest: 0.2
+          });
+          
+          const plane = new THREE.Mesh(geometry, material);
+          
+          // Offset each plane slightly
+          plane.position.set(
+            (Math.random() - 0.5) * 10,
+            (Math.random() - 0.5) * 5,
+            (Math.random() - 0.5) * 3
+          );
+          
+          group.add(plane);
+        }
+        
+        return group;
+      }
+      
+      createFogCloud() {
+        const group = new THREE.Group();
+        const numParticles = 20 + Math.floor(Math.random() * 10);
+        
+        for (let i = 0; i < numParticles; i++) {
+          const size = 15 + Math.random() * 10;
+          const geometry = new THREE.PlaneGeometry(size, size);
+          const material = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.2,
+            depthWrite: false,
+            depthTest: true,
+            alphaTest: 0.1
+          });
+          
+          const particle = new THREE.Mesh(geometry, material);
+          
+          // Position within a spherical volume
+          const radius = 10 + Math.random() * 8;
+          const theta = Math.random() * Math.PI * 2;
+          const phi = Math.random() * Math.PI;
+          
+          particle.position.set(
+            radius * Math.sin(phi) * Math.cos(theta),
+            radius * Math.cos(phi) * 0.3,
+            radius * Math.sin(phi) * Math.sin(theta)
+          );
+          
+          particle.userData = {
+            originalPos: particle.position.clone(),
+            speed: 0.0002 + Math.random() * 0.0002,
+            offset: Math.random() * Math.PI * 2
+          };
+          
+          group.add(particle);
+        }
+        
+        return group;
+      }
+      
+      createAirship() {
+        this.airship = new THREE.Group();
+        
+        // Remove initial rotation (or set to 0) to face opposite direction
+        this.airship.rotation.y = 0;
+        
+        this.scene.add(this.airship);
+        
+        // Create the ship hull
+        const hullGeometry = new THREE.BoxGeometry(5, 1.5, 12);
+        // Round the bottom of the hull
+        const hullPositions = hullGeometry.attributes.position.array;
+        for (let i = 0; i < hullPositions.length; i += 3) {
+          // Bottom vertices
+          if (hullPositions[i + 1] < 0) {
+            // Round the bottom in x direction
+            const xPos = hullPositions[i];
+            const roundingFactor = 0.2 * (Math.abs(xPos) / 2.5);
+            hullPositions[i + 1] -= roundingFactor;
+            
+            // Make the bow and stern pointed
+            const zPos = hullPositions[i + 2];
+            const taperZ = 0.3 * (Math.abs(zPos) / 6.0);
+            hullPositions[i] *= (1.0 - taperZ);
+          }
+        }
+        hullGeometry.computeVertexNormals();
+        
+        const woodTexture = {
+          map: new THREE.MeshPhongMaterial({
+            color: 0x8B4513, // Brown wood color
+            flatShading: false,
+            shininess: 10
+          })
+        };
+        
+        const hullMaterial = new THREE.MeshPhongMaterial({
+          color: 0x8B4513, // Brown wood color
+          flatShading: false,
+          shininess: 10
+        });
+        
+        const hull = new THREE.Mesh(hullGeometry, hullMaterial);
+        hull.castShadow = true;
+        hull.receiveShadow = true;
+        
+        // Add deck details
+        const deckGeometry = new THREE.BoxGeometry(4.8, 0.2, 11.8);
+        const deckMaterial = new THREE.MeshPhongMaterial({
+          color: 0xA0522D, // Slightly different wood tone
+          flatShading: false
+        });
+        const deck = new THREE.Mesh(deckGeometry, deckMaterial);
+        deck.position.y = 0.85;
+        deck.castShadow = true;
+        deck.receiveShadow = true;
+        
+        // Create the mast
+        const mastGeometry = new THREE.CylinderGeometry(0.2, 0.3, 8, 8);
+        const mastMaterial = new THREE.MeshPhongMaterial({
+          color: 0x8B4513, // Brown wood color
+          flatShading: false
+        });
+        const mast = new THREE.Mesh(mastGeometry, mastMaterial);
+        mast.position.set(0, 5, -1); // Position slightly toward the back
+        mast.castShadow = true;
+        
+        // Create the main sail (partially furled for flying)
+        const sailGeometry = new THREE.PlaneGeometry(3, 4);
+        const sailMaterial = new THREE.MeshPhongMaterial({
+          color: 0xFFFFFF,
+          side: THREE.DoubleSide,
+          flatShading: false,
+        });
+        const mainSail = new THREE.Mesh(sailGeometry, sailMaterial);
+        mainSail.rotation.y = Math.PI / 2; // Orient correctly
+        mainSail.position.set(0, 4, -1);
+        mainSail.castShadow = true;
+        
+        // Create a smaller sail at the bow
+        const frontSail = new THREE.Mesh(
+          new THREE.PlaneGeometry(2, 3),
+          sailMaterial.clone()
+        );
+        frontSail.rotation.y = Math.PI / 2;
+        frontSail.position.set(0, 3, 3);
+        frontSail.castShadow = true;
+        
+        // Add a pirate flag on top
+        const flagPoleGeometry = new THREE.CylinderGeometry(0.05, 0.05, 2, 8);
+        const flagPole = new THREE.Mesh(flagPoleGeometry, mastMaterial.clone());
+        flagPole.position.set(0, 9, -1);
+        
+        const flagGeometry = new THREE.PlaneGeometry(1, 0.6);
+        const flagMaterial = new THREE.MeshPhongMaterial({
+          color: 0x000000, // Black flag
+          side: THREE.DoubleSide
+        });
+        const flag = new THREE.Mesh(flagGeometry, flagMaterial);
+        flag.rotation.y = Math.PI / 2;
+        flag.position.set(0, 0.8, 0);
+        flagPole.add(flag);
+        
+        // Add jet engines
+        const engineCount = 2;
+        const engines = [];
+        
+        for (let i = 0; i < engineCount; i++) {
+          const engineGroup = new THREE.Group();
+          
+          // Engine housing
+          const engineHousingGeometry = new THREE.CylinderGeometry(0.6, 0.8, 2, 8);
+          const engineHousingMaterial = new THREE.MeshPhongMaterial({
+            color: 0x444444, // Dark gray
+            metalness: 0.8,
+            roughness: 0.2
+          });
+          const engineHousing = new THREE.Mesh(engineHousingGeometry, engineHousingMaterial);
+          engineHousing.rotation.x = Math.PI / 2; // Align horizontally
+          engineGroup.add(engineHousing);
+          
+          // Exhaust nozzle
+          const nozzleGeometry = new THREE.CylinderGeometry(0.5, 0.3, 0.8, 8);
+          const nozzleMaterial = new THREE.MeshPhongMaterial({
+            color: 0x333333, // Darker metal
+            metalness: 0.9,
+            roughness: 0.1
+          });
+          const nozzle = new THREE.Mesh(nozzleGeometry, nozzleMaterial);
+          nozzle.position.z = -1.4;
+          nozzle.rotation.x = Math.PI / 2;
+          engineGroup.add(nozzle);
+          
+          // Engine glow (exhaust)
+          const glowGeometry = new THREE.CylinderGeometry(0.2, 0.4, 0.5, 8);
+          const glowMaterial = new THREE.MeshBasicMaterial({
+            color: 0xFF4500, // Orange-red glow
+            transparent: true,
+            opacity: 0.8
+          });
+          this.engineGlow = new THREE.Mesh(glowGeometry, glowMaterial);
+          this.engineGlow.position.z = -1.9;
+          this.engineGlow.rotation.x = Math.PI / 2;
+          engineGroup.add(this.engineGlow);
+          
+          // Position the engine on the side of the hull
+          engineGroup.position.set(i === 0 ? -2.8 : 2.8, 0, -2);
+          
+          engines.push(engineGroup);
+          this.airship.add(engineGroup);
+        }
+        
+        // Store engines for animation
+        this.engines = engines;
+        
+        // Add some decorative cannons
+        const cannonCount = 3;
+        for (let i = 0; i < cannonCount; i++) {
+          const cannonGroup = new THREE.Group();
+          
+          // Cannon barrel
+          const barrelGeometry = new THREE.CylinderGeometry(0.15, 0.2, 0.8, 8);
+          const barrelMaterial = new THREE.MeshPhongMaterial({
+            color: 0x333333,
+            metalness: 0.8
+          });
+          const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+          barrel.rotation.z = Math.PI / 2;
+          barrel.position.x = 0.4;
+          cannonGroup.add(barrel);
+          
+          // Cannon base
+          const baseGeometry = new THREE.BoxGeometry(0.4, 0.3, 0.5);
+          const baseMaterial = new THREE.MeshPhongMaterial({
+            color: 0x8B4513
+          });
+          const base = new THREE.Mesh(baseGeometry, baseMaterial);
+          cannonGroup.add(base);
+          
+          // Position on the side of the ship
+          cannonGroup.position.set(2.6, 0.8, -3 + i * 2);
+          this.airship.add(cannonGroup);
+          
+          // Add symmetric cannon on the other side
+          const cannonGroup2 = cannonGroup.clone();
+          cannonGroup2.rotation.z = Math.PI;
+          cannonGroup2.position.set(-2.6, 0.8, -3 + i * 2);
+          this.airship.add(cannonGroup2);
+        }
+        
+        // Add cabin/quarterdeck at the back
+        const cabinGeometry = new THREE.BoxGeometry(3, 1.5, 3);
+        const cabinMaterial = new THREE.MeshPhongMaterial({
+          color: 0x8B4513,
+          flatShading: false
+        });
+        const cabin = new THREE.Mesh(cabinGeometry, cabinMaterial);
+        cabin.position.set(0, 1.5, -4);
+        cabin.castShadow = true;
+        
+        // Add windows to cabin
+        const windowGeometry = new THREE.PlaneGeometry(0.4, 0.4);
+        const windowMaterial = new THREE.MeshPhongMaterial({
+          color: 0x87CEFA, // Light blue
+          transparent: true,
+          opacity: 0.7,
+          side: THREE.DoubleSide
+        });
+        
+        // Add windows to the back of the cabin
+        const backWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+        backWindow.position.set(0, 0, -1.55);
+        cabin.add(backWindow);
+        
+        // Add side windows
+        const sideWindow1 = new THREE.Mesh(windowGeometry, windowMaterial);
+        sideWindow1.rotation.y = Math.PI / 2;
+        sideWindow1.position.set(1.55, 0, 0);
+        cabin.add(sideWindow1);
+        
+        const sideWindow2 = new THREE.Mesh(windowGeometry, windowMaterial);
+        sideWindow2.rotation.y = Math.PI / 2;
+        sideWindow2.position.set(-1.55, 0, 0);
+        cabin.add(sideWindow2);
+        
+        // Add railings
+        this.addRailings();
+        
+        // Add all main components to the ship
+        this.airship.add(
+          hull, deck, mast, mainSail, frontSail, 
+          flagPole, cabin
+        );
+        
+        // Store reference to the engine glow for animation
+        this.engineGlows = engines.map(engine => engine.children[2]);
+      }
+      
+      // Helper method to add railings around the ship
+      addRailings() {
+        const railingMaterial = new THREE.MeshPhongMaterial({
+          color: 0xA0522D
+        });
+        
+        // Create posts
+        const postCount = 10;
+        const shipLength = 11;
+        const shipWidth = 4.8;
+        
+        // Add side railings
+        for (let side = -1; side <= 1; side += 2) {
+          for (let i = 0; i < postCount; i++) {
+            const post = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.06, 0.06, 0.8, 6),
+              railingMaterial
+            );
+            const z = (i / (postCount - 1)) * shipLength - shipLength / 2;
+            post.position.set(side * shipWidth / 2, 1.2, z);
+            this.airship.add(post);
+            
+            // Connect posts with horizontal rails (except last post)
+            if (i < postCount - 1) {
+              const railLength = shipLength / (postCount - 1);
+              const rail = new THREE.Mesh(
+                new THREE.BoxGeometry(0.05, 0.05, railLength + 0.05),
+                railingMaterial
+              );
+              rail.position.set(side * shipWidth / 2, 1.5, z + railLength / 2);
+              this.airship.add(rail);
+            }
+          }
+        }
+        
+        // Add front and back railings
+        for (let side = -1; side <= 1; side += 2) {
+          const postCount = 5;
+          for (let i = 0; i < postCount; i++) {
+            const post = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.06, 0.06, 0.8, 6),
+              railingMaterial
+            );
+            const x = (i / (postCount - 1)) * shipWidth - shipWidth / 2;
+            post.position.set(x, 1.2, side * shipLength / 2);
+            this.airship.add(post);
+            
+            // Connect posts with horizontal rails (except last post)
+            if (i < postCount - 1) {
+              const railLength = shipWidth / (postCount - 1);
+              const rail = new THREE.Mesh(
+                new THREE.BoxGeometry(railLength + 0.05, 0.05, 0.05),
+                railingMaterial
+              );
+              rail.position.set(x + railLength / 2, 1.5, side * shipLength / 2);
+              this.airship.add(rail);
+            }
+          }
+        }
+      }
+      
+      // NEW: New method for cloud/fog ground layer (preserves createGrassGround)
+      createCloudFogLayer() {
+        // Set up scene-level fog for atmospheric haze
+        this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.002); // Adjust density as needed
+        
+        // Load a cloud texture (ensure you use a valid URL)
+        const textureLoader = new THREE.TextureLoader();
+        const cloudTexture = textureLoader.load('https://mrdoob.github.io/three.js/examples/textures/cloud.png');
+        
+        // Create a material using the cloud texture
+        const cloudMaterial = new THREE.MeshLambertMaterial({
+          map: cloudTexture,
+          transparent: true,
+          opacity: 0.7, // Adjust opacity for softness
+          depthWrite: false
+        });
+        
+        // Create a large plane that will serve as the low-lying cloud/fog layer
+        const cloudPlaneGeometry = new THREE.PlaneGeometry(6000, 6000, 1, 1);
+        const cloudPlane = new THREE.Mesh(cloudPlaneGeometry, cloudMaterial);
+        cloudPlane.rotation.x = -Math.PI / 2;  // Orient horizontally
+        cloudPlane.position.y = 5; // Position low enough to be below the player (adjust as needed)
+        
+        // Optionally, animate texture offset in your animate() loop for subtle movement:
+        // e.g., in animate(), add: cloudMaterial.map.offset.x += 0.0005;
+        
+        this.scene.add(cloudPlane);
+        console.log("Cloud and fog layer created");
+      }
+      
+      // Original createGrassGround() remains here unchanged
+      createGrassGround() {
+        const terrainSize = 5500;
+        const resolution = 500;
+        
+        // Create a ground plane to hold the grass
+        const groundGeometry = new THREE.PlaneGeometry(terrainSize, terrainSize, resolution-1, resolution-1);
+        groundGeometry.rotateX(-Math.PI / 2);
+        
+        // Apply the same height map as the LIDAR terrain
+        const vertices = groundGeometry.attributes.position.array;
+        for (let i = 0; i < vertices.length; i += 3) {
+          const x = Math.floor((vertices[i] + terrainSize/2) / terrainSize * resolution);
+          const z = Math.floor((vertices[i+2] + terrainSize/2) / terrainSize * resolution);
+          
+          // Make sure we're within bounds
+          if (x >= 0 && x < resolution && z >= 0 && z < resolution) {
+            vertices[i+1] = this.heightMap[x][z] * 40;
+          }
+        }
+        
+        // Update normals for lighting
+        groundGeometry.computeVertexNormals();
+        
+        // Create a more detailed ground material with grass texture
+        const groundMaterial = new THREE.MeshStandardMaterial({
+          color: 0x4CAF50, // Vibrant green
+          roughness: 0.8,
+          metalness: 0.0,
+          flatShading: false
+        });
+        
+        // Add some variation to the color
+        const colors = [];
+        const positionAttribute = groundGeometry.getAttribute('position');
+        
+        for (let i = 0; i < positionAttribute.count; i++) {
+          const y = positionAttribute.getY(i);
+          
+          // Create color based on height
+          let color = new THREE.Color();
+          
+          if (y < 5) {
+            // Water/beach - bluish
+            color.setRGB(0.1, 0.3, 0.7);
+          } else if (y < 15) {
+            // Lowlands - vibrant green with variations
+            const greenVariation = Math.random() * 0.2 - 0.1;
+            color.setRGB(0.1, 0.7 + greenVariation, 0.2);
+          } else if (y < 25) {
+            // Forest - darker green
+            color.setRGB(0.0, 0.5, 0.1);
+          } else {
+            // Mountains - brownish-gray
+            color.setRGB(0.5, 0.4, 0.3);
+          }
+          
+          // Add colors 
+          colors.push(color.r, color.g, color.b);
+        }
+        
+        // Add color attribute to geometry
+        groundGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        groundMaterial.vertexColors = true;
+        
+        // Create the ground mesh
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.receiveShadow = true;
+        
+        // Small adjustment to avoid z-fighting with the point cloud
+        ground.position.y = -0.1;
+        
+        this.scene.add(ground);
+        
+        console.log("Ground layer created");
+      }
+      
+      animate() {
+        requestAnimationFrame(() => this.animate());
+        
+        const elapsedTime = this.clock.getElapsedTime();
+        
+        // Update enemies
+        this.updateEnemies();
+        
+        // Update lock
+        this.updateLock();
+        
+        // Animate engine exhaust
+        if (this.engineGlows) {
+          this.engineGlows.forEach(glow => {
+            // Pulsate engine glow
+            const pulsate = Math.sin(elapsedTime * 10) * 0.2 + 0.8;
+            glow.scale.set(pulsate, 1, pulsate);
+            
+            // Make engines brighter when accelerating
+            let intensity = 0.5;  // Base intensity
+            if (this.keys['w']) {
+              intensity = 1.0;  // Full thrust
+            }
+            
+            // Update color based on intensity
+            glow.material.color.setRGB(1.0 * intensity, 0.3 * intensity, 0.1 * intensity);
+            glow.material.opacity = 0.7 * intensity + 0.3;
+          });
+        }
+        
+        this.updateClouds();
+        this.updateAirship();
+        
+        // Update projectiles
+        this.updateProjectiles();
+        
+        // Update cannon cooldown
+        if (this.cannonCooldown > 0) {
+          this.cannonCooldown--;
+        }
+        
+        // Update crosshair visibility
+        if (this.crosshair) {
+          this.crosshair.style.display = 'block'; // Always show crosshair
+        }
+
+        // Update firing ability - enable firing in all camera modes
+        this.canFireCannons = true;
+        
+        this.renderer.render(this.scene, this.camera);
+      }
+      
+      updateClouds() {
+        const time = Date.now() * 0.00005;
+        
+        this.clouds.children.forEach(cloud => {
+          if (cloud.userData.type === 'billboard') {
+            // Update billboard clouds - rotate around center
+            const angle = cloud.userData.angle + time * cloud.userData.speed;
+            const radius = cloud.userData.radius;
+            
+            cloud.position.x = Math.cos(angle) * radius;
+            cloud.position.z = Math.sin(angle) * radius;
+            cloud.position.y += Math.sin(time + cloud.userData.timeOffset) * 0.05;
+            
+            // Keep facing center
+            cloud.lookAt(0, cloud.position.y, 0);
+            
+          } else if (cloud.userData.type === 'fog') {
+            // Update fog clouds
+            cloud.position.y = cloud.userData.originalY + Math.sin(time + cloud.userData.timeOffset) * 3;
+            
+            // Update individual particles
+            cloud.children.forEach(particle => {
+              const pos = particle.userData.originalPos;
+              const speed = particle.userData.speed;
+              const offset = particle.userData.offset;
+              
+              particle.position.x = pos.x + Math.sin(time * speed + offset) * 2;
+              particle.position.y = pos.y + Math.cos(time * speed + offset) * 1;
+              particle.position.z = pos.z + Math.sin(time * speed * 0.7 + offset) * 2;
+              
+              // Face camera
+              particle.quaternion.copy(this.camera.quaternion);
+            });
+          }
+        });
+      }
+      
+      updateAirship() {
+        if (this.isPlayerDead) return;
+        
+        // Control parameters
+        const acceleration = this.enginePower;
+        const maxSpeed = 1.9;
+        const rotationSpeed = 0.05;
+        
+        // Calculate wind effects (subtle random forces)
+        const windForce = new THREE.Vector3(
+          (Math.sin(Date.now() * 0.0003) + Math.cos(Date.now() * 0.0007)) * this.windEffect,
+          (Math.sin(Date.now() * 0.0005)) * this.windEffect * 0.5,
+          (Math.cos(Date.now() * 0.0006) + Math.sin(Date.now() * 0.0009)) * this.windEffect
+        );
+        
+        // Add wind force
+        this.velocity.add(windForce);
+        
+        // Get current terrain and collision info once
+        const terrainInfo = this.checkTerrainCollision();
+        const currentHeight = this.airship.position.y - terrainInfo.groundHeight;
+        const minHeight = terrainInfo.groundHeight + this.hardDeckLimit;
+        
+        // Track if we're applying horizontal movement
+        let horizontalMovement = false;
+        
+        // Forward/Backward - Updated vectors to match new orientation
+        if (this.keys['w']) {
+          const direction = new THREE.Vector3(0, 0, 1);
+          direction.applyQuaternion(this.airship.quaternion);
+          this.velocity.add(direction.multiplyScalar(acceleration));
+          horizontalMovement = true;
+        }
+        
+        if (this.keys['s']) {
+          const direction = new THREE.Vector3(0, 0, -1);
+          direction.applyQuaternion(this.airship.quaternion);
+          this.velocity.add(direction.multiplyScalar(acceleration * 0.7)); // Backward is slower
+          horizontalMovement = true;
+        }
+
+        // Strafe left/right
+        if (this.keys['q']) {
+          const direction = new THREE.Vector3(1, 0, 0); // Changed to positive X for left strafe
+          direction.applyQuaternion(this.airship.quaternion);
+          this.velocity.add(direction.multiplyScalar(acceleration * 0.8)); // Slightly slower than forward
+          horizontalMovement = true;
+        }
+        
+        if (this.keys['e']) {
+          const direction = new THREE.Vector3(-1, 0, 0); // Changed to negative X for right strafe
+          direction.applyQuaternion(this.airship.quaternion);
+          this.velocity.add(direction.multiplyScalar(acceleration * 0.8)); // Slightly slower than forward
+          horizontalMovement = true;
+        }
+        
+        // Apply antigravity system with enhanced stability
+        if (this.antigravActive) {
+          // Handle vertical movement controls
+          if (this.keys[' ']) {
+            // Ascend with speed limit and max altitude check
+            const newHeight = this.airship.position.y + this.verticalSpeed;
+            if (newHeight < this.maxAltitude) {
+              this.hoverHeight = Math.min(
+                this.hoverHeight + this.verticalSpeed,
+                this.maxAltitude
+              );
+              // Add direct velocity boost for more responsive ascent
+              this.velocity.y += this.verticalSpeed * 0.3;
+            }
+          } else if (this.keys['shift']) {
+            // Descend with minimum height enforcement
+            this.hoverHeight = Math.max(
+              this.hoverHeight - this.verticalSpeed,
+              minHeight
+            );
+            // Add direct velocity boost for more responsive descent
+            this.velocity.y -= this.verticalSpeed * 0.3;
+          }
+          
+          // Smoother height stabilization
+          const heightDifference = currentHeight - this.hoverHeight;
+          
+          // Apply antigrav force with enhanced smoothing
+          if (Math.abs(heightDifference) > 0.01) {
+            // Smooth force calculation
+            const antigravForce = -heightDifference * this.antigravStrength;
+            
+            // Apply smoothed force
+            this.velocity.y = THREE.MathUtils.lerp(
+              this.velocity.y,
+              this.velocity.y + antigravForce,
+              0.1
+            );
+          } else {
+            // Perfect hover stability
+            this.velocity.y *= this.hoverStability;
+          }
+          
+          // Additional vertical stabilization
+          this.velocity.y *= this.verticalDampening;
+        } else {
+          this.velocity.y -= this.gravity;
+        }
+        
+        // Enforce hard deck limit
+        if (this.airship.position.y < minHeight) {
+          this.airship.position.y = minHeight;
+          this.velocity.y = Math.max(0, this.velocity.y);
+        }
+        
+        // Handle turning with inertia
+        let turnForce = 0;
+        
+        if (this.keys['a']) {
+          turnForce = rotationSpeed;
+          // Bank the ship when turning (reversed angle for correct lean)
+          const targetBankAngle = -this.bankingFactor;  // Changed from positive to negative
+          this.airship.rotation.z = THREE.MathUtils.lerp(
+            this.airship.rotation.z,
+            targetBankAngle,
+            0.1
+          );
+        } else if (this.keys['d']) {
+          turnForce = -rotationSpeed;
+          // Bank the ship when turning (reversed angle for correct lean)
+          const targetBankAngle = this.bankingFactor;  // Changed from negative to positive
+          this.airship.rotation.z = THREE.MathUtils.lerp(
+            this.airship.rotation.z,
+            targetBankAngle,
+            0.1
+          );
+        } else {
+          // Return to level when not turning
+          this.airship.rotation.z = THREE.MathUtils.lerp(
+            this.airship.rotation.z,
+            0,
+            0.1
+          );
+        }
+        
+        // Apply turn force with inertia
+        this.rotation.y = this.rotation.y * this.turnInertia + turnForce * (1 - this.turnInertia);
+        
+        // Save current position for collision detection
+        const previousPosition = this.airship.position.clone();
+        
+        // Apply velocity to position with different drag values for each axis
+        this.airship.position.x += this.velocity.x;
+        this.airship.position.y += this.velocity.y;
+        this.airship.position.z += this.velocity.z;
+        
+        // Apply rotation
+        this.airship.rotation.y += this.rotation.y;
+        
+        // Apply drag differently for lateral and vertical movement
+        this.velocity.x *= this.lateralDrag;
+        this.velocity.z *= this.lateralDrag;
+        this.velocity.y *= this.verticalDrag;
+        
+        // Update bobbing - much subtler and based on hover state
+        const speed = this.velocity.length();
+        const isHovering = speed < 0.1;
+        const bobbingAmount = isHovering ? 0.005 : Math.max(0, 0.003 - speed * 0.002);
+        this.airship.position.y += Math.sin(Date.now() * 0.001) * bobbingAmount;
+        
+        // Handle collision
+        if (terrainInfo.collided) {
+          // Play collision sound if not in cooldown
+          if (!this.collisionOccurred && this.collisionCooldown <= 0) {
+            this.playCollisionSound();
+            this.collisionOccurred = true;
+            this.collisionCooldown = 30;
+          }
+          
+          // Move back to previous position
+          this.airship.position.copy(previousPosition);
+          
+          // Bounce in the opposite direction with dampening
+          this.velocity.multiplyScalar(-this.collisionResponse);
+          
+          // Add upward component to help prevent getting stuck
+          this.velocity.y = Math.max(this.velocity.y, 0.2);
+          
+          // Apply slight random rotation for realistic effect
+          this.airship.rotation.z += (Math.random() - 0.5) * 0.1;
+          setTimeout(() => {
+            this.airship.rotation.z = 0; // Reset rotation after a short delay
+          }, 500);
+        } else {
+          this.collisionOccurred = false;
+        }
+        
+        // Update engine sound based on throttle
+        this.updateEngineSound(horizontalMovement);
+        
+        // Update camera based on mode
+        if (this.cameraMode === 'follow') {
+          // Follow mode - camera follows behind airship
+          const cameraOffset = new THREE.Vector3(0, 5, -15);
+          cameraOffset.applyQuaternion(this.airship.quaternion);
+          this.camera.position.copy(this.airship.position).add(cameraOffset);
+          this.camera.lookAt(this.airship.position);
+        } else if (this.cameraMode === 'orbit') {
+          // Orbit mode - camera orbits around airship based on mouse input
+          const horizontalRadius = this.orbitDistance * Math.cos(this.orbitAngleVertical);
+          const verticalOffset = this.orbitDistance * Math.sin(this.orbitAngleVertical);
+          
+          const cameraPosition = new THREE.Vector3(
+            horizontalRadius * Math.sin(this.orbitAngleHorizontal),
+            this.orbitHeight + verticalOffset,
+            horizontalRadius * Math.cos(this.orbitAngleHorizontal)
+          );
+          
+          // Apply ship's rotation to maintain relative position
+          cameraPosition.applyQuaternion(this.airship.quaternion);
+          this.camera.position.copy(this.airship.position).add(cameraPosition);
+          this.camera.lookAt(this.airship.position);
+        } else {
+          // Overhead mode - bird's eye view
+          this.camera.position.set(
+            this.airship.position.x,
+            this.airship.position.y + 100,
+            this.airship.position.z
+          );
+          this.camera.lookAt(this.airship.position);
+        }
+      }
+      
+      // Add a new method for engine sound
+      updateEngineSound(thrustApplied) {
+        // Target intensity based on thrust
+        const targetIntensity = thrustApplied ? 1.0 : 0.3;
+        
+        // Smoothly adjust current intensity
+        this.engineSoundIntensity = THREE.MathUtils.lerp(
+          this.engineSoundIntensity,
+          targetIntensity,
+          0.1
+        );
+        
+        // Initialize audio context if needed and not already created
+        if (!this.audioContext && !this.engineSoundEnabled) {
+          try {
+            // Create audio context on user interaction
+            if (this.keys['w'] || this.keys['s'] || this.keys['a'] || this.keys['d'] || this.keys[' '] || this.keys['shift']) {
+              this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+              this.setupEngineSound();
+              this.engineSoundEnabled = true;
+            }
+          } catch (e) {
+            console.log("Audio not supported", e);
+          }
+        }
+        
+        // Update existing engine sound parameters if enabled
+        if (this.engineSoundEnabled && this.engineOscillator) {
+          // Adjust frequency based on intensity (higher pitch when more thrust)
+          const baseFreq = 100 + this.engineSoundIntensity * 50;
+          this.engineOscillator.frequency.setValueAtTime(baseFreq, this.audioContext.currentTime);
+          
+          // Adjust volume
+          if (this.engineGainNode) {
+            const volume = this.engineSoundIntensity * 0.15; // Keep volume reasonable
+            this.engineGainNode.gain.setValueAtTime(volume, this.audioContext.currentTime);
+          }
+        }
+      }
+      
+      // Set up continuous engine sound
+      setupEngineSound() {
+        if (!this.audioContext) return;
+        
+        // Create persistent oscillator for engine hum
+        this.engineOscillator = this.audioContext.createOscillator();
+        this.engineGainNode = this.audioContext.createGain();
+        
+        // Set initial properties for engine hum
+        this.engineOscillator.type = 'sawtooth';
+        this.engineOscillator.frequency.setValueAtTime(100, this.audioContext.currentTime);
+        
+        // Add some modulation for texture
+        const modulator = this.audioContext.createOscillator();
+        const modulatorGain = this.audioContext.createGain();
+        
+        modulator.type = 'sine';
+        modulator.frequency.setValueAtTime(7, this.audioContext.currentTime);
+        modulatorGain.gain.setValueAtTime(10, this.audioContext.currentTime);
+        
+        modulator.connect(modulatorGain);
+        modulatorGain.connect(this.engineOscillator.frequency);
+        
+        // Set initial volume (low)
+        this.engineGainNode.gain.setValueAtTime(0.05, this.audioContext.currentTime);
+        
+        // Connect and start
+        this.engineOscillator.connect(this.engineGainNode);
+        this.engineGainNode.connect(this.audioContext.destination);
+        
+        this.engineOscillator.start();
+        modulator.start();
+      }
+      
+      // New method for terrain collision detection
+      checkTerrainCollision() {
+        const terrainSize = 500;
+        const resolution = 50;
+        const pos = this.airship.position;
+        
+        // Check if position is within terrain bounds
+        if (
+          pos.x < -terrainSize/2 || 
+          pos.x > terrainSize/2 || 
+          pos.z < -terrainSize/2 || 
+          pos.z > terrainSize/2
+        ) {
+          return { collided: false, groundHeight: 0 };
+        }
+        
+        // Convert world position to heightmap coordinates
+        const gridX = Math.floor((pos.x + terrainSize/2) / terrainSize * resolution);
+        const gridZ = Math.floor((pos.z + terrainSize/2) / terrainSize * resolution);
+        
+        // Make sure we're within bounds
+        if (gridX < 0 || gridX >= resolution || gridZ < 0 || gridZ >= resolution) {
+          return { collided: false, groundHeight: 0 };
+        }
+        
+        // Get terrain height at this position
+        const groundHeight = this.heightMap[gridX][gridZ] * 40;
+        
+        // Get airship collision boundary (bottom of gondola)
+        const airshipBottom = pos.y - 2.0; // Approximate height from center to bottom
+        
+        // Check for collision with terrain
+        const collided = airshipBottom < groundHeight;
+        
+        return { collided, groundHeight };
+      }
+      
+      // Simple collision sound using Web Audio API
+      playCollisionSound() {
+        try {
+          // Only initialize audio context on first collision
+          if (!this.audioContext) {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          
+          // Create oscillator for impact sound
+          const oscillator = this.audioContext.createOscillator();
+          const gainNode = this.audioContext.createGain();
+          
+          // Set properties for a "thud" sound
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(100, this.audioContext.currentTime);
+          oscillator.frequency.exponentialRampToValueAtTime(30, this.audioContext.currentTime + 0.5);
+          
+          // Set volume envelope
+          gainNode.gain.setValueAtTime(0.3, this.audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.5);
+          
+          // Connect nodes and play
+          oscillator.connect(gainNode);
+          gainNode.connect(this.audioContext.destination);
+          
+          oscillator.start();
+          oscillator.stop(this.audioContext.currentTime + 0.5);
+          
+          // Add visual feedback
+          this.showCollisionEffect();
+        } catch (e) {
+          console.log("Audio not supported", e);
+        }
+      }
+      
+      // Add visual feedback for collisions
+      showCollisionEffect() {
+        // Create a flash effect
+        const flash = new THREE.Mesh(
+          new THREE.SphereGeometry(3, 8, 8),
+          new THREE.MeshBasicMaterial({ 
+            color: 0xffff00,
+            transparent: true,
+            opacity: 0.7
+          })
+        );
+        
+        // Position at the airship
+        flash.position.copy(this.airship.position);
+        
+        // Add to scene
+        this.scene.add(flash);
+        
+        // Animate and remove
+        let opacity = 0.7;
+        const fadeOut = setInterval(() => {
+          opacity -= 0.05;
+          flash.material.opacity = opacity;
+          
+          if (opacity <= 0) {
+            clearInterval(fadeOut);
+            this.scene.remove(flash);
+          }
+        }, 50);
+      }
+      
+      handleResize() {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        
+        this.camera.aspect = width / height;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(width, height);
+      }
+      
+      // Add after createLIDARTerrain() but before animate()
+      findSafeSpawnLocation() {
+        const terrainSize = 500;
+        const resolution = 50;
+        const minSafeHeight = 50; // Minimum height above terrain for safe spawn
+        
+        // Start at center and spiral outward to find safe spot
+        let x = 0, z = 0;
+        let dx = 1, dz = 0;
+        let segmentLength = 1;
+        let segmentsPassed = 0;
+        
+        while (Math.abs(x) < resolution/2 && Math.abs(z) < resolution/2) {
+          // Convert to grid coordinates
+          const gridX = Math.floor((x + resolution/2));
+          const gridZ = Math.floor((z + resolution/2));
+          
+          if (gridX >= 0 && gridX < resolution && gridZ >= 0 && gridZ < resolution) {
+            const terrainHeight = this.heightMap[gridX][gridZ] * 40;
+            
+            // Check if this location is safe (well above terrain)
+            if (terrainHeight + minSafeHeight < this.maxAltitude) {
+              // Convert grid position to world coordinates
+              const worldX = (x / resolution) * terrainSize;
+              const worldZ = (z / resolution) * terrainSize;
+              const spawnHeight = terrainHeight + minSafeHeight;
+              
+              return { x: worldX, y: spawnHeight, z: worldZ };
+            }
+          }
+          
+          // Spiral pattern movement
+          x += dx;
+          z += dz;
+          segmentsPassed++;
+          
+          if (segmentsPassed === segmentLength) {
+            segmentsPassed = 0;
+            // Rotate direction 90 degrees
+            [dx, dz] = [-dz, dx];
+            // Increase segment length every two turns
+            if (dz === 0) segmentLength++;
+          }
+        }
+        
+        // Fallback to high altitude at center if no safe spot found
+        return { x: 0, y: 150, z: 0 };
+      }
+      
+      // Add after handleResize()
+      handleMouseDown(event) {
+        if (event.button === 0) { // Left click
+          // Store cursor position for targeting
+          this.cursorPosition = { x: event.clientX, y: event.clientY };
+          
+          // Fire cannons on left click in any camera mode
+          this.fireCannons();
+          
+          // Only start orbit if in orbit mode and right mouse button is also pressed
+          if (this.cameraMode === 'orbit' && (event.buttons & 2)) {
+            this.isMouseDown = true;
+            this.lastMouseX = event.clientX;
+            this.lastMouseY = event.clientY;
+          }
+        } else if (event.button === 2) { // Right click
+          this.isMouseDown = true;
+          this.lastMouseX = event.clientX;
+          this.lastMouseY = event.clientY;
+        }
+      }
+      
+      handleMouseUp() {
+        this.isMouseDown = false;
+      }
+      
+      handleMouseMove(event) {
+        // Always update cursor position for targeting
+        this.cursorPosition = { x: event.clientX, y: event.clientY };
+        
+        // Update crosshair position
+        if (this.crosshair) {
+          this.crosshair.style.left = (event.clientX - 10) + 'px';
+          this.crosshair.style.top = (event.clientY - 10) + 'px';
+        }
+        
+        // Only handle camera orbit if in orbit mode and mouse is down
+        if (!this.isMouseDown || this.cameraMode !== 'orbit') return;
+        
+        const deltaX = event.clientX - this.lastMouseX;
+        const deltaY = event.clientY - this.lastMouseY;
+        
+        this.orbitAngleHorizontal -= deltaX * this.mouseSensitivity;
+        this.orbitAngleVertical = Math.max(
+          -Math.PI / 3,
+          Math.min(Math.PI / 3, this.orbitAngleVertical + deltaY * this.mouseSensitivity)
+        );
+        
+        this.lastMouseX = event.clientX;
+        this.lastMouseY = event.clientY;
+      }
+      
+      handleMouseWheel(event) {
+        if (this.cameraMode !== 'orbit') return;
+        
+        // Adjust orbit distance with mouse wheel
+        this.orbitDistance = Math.max(
+          5,
+          Math.min(30, this.orbitDistance + event.deltaY * 0.01)
+        );
+      }
+      
+      // Add new method for firing cannons
+      fireCannons() {
+        if (this.cannonCooldown > 0 || !this.canFireCannons) return;
+        
+        // Calculate target point in world space using cursor position
+        const raycaster = new THREE.Raycaster();
+        const normalizedPosition = new THREE.Vector2(
+          (this.cursorPosition.x / window.innerWidth) * 2 - 1,
+          -(this.cursorPosition.y / window.innerHeight) * 2 + 1
+        );
+        raycaster.setFromCamera(normalizedPosition, this.camera);
+        
+        // Different targeting based on camera mode
+        if (this.cameraMode === 'orbit') {
+          // Orbit mode - use raycaster direction
+          this.targetPoint.copy(raycaster.ray.direction).multiplyScalar(50).add(this.camera.position);
+        } else if (this.cameraMode === 'follow') {
+          // Follow mode - target in front of the ship
+          const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.airship.quaternion);
+          this.targetPoint.copy(forward).multiplyScalar(50).add(this.airship.position);
+        } else if (this.cameraMode === 'overhead') {
+          // Overhead mode - use raycaster to target ground plane
+          const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+          const targetRay = new THREE.Ray(this.camera.position, raycaster.ray.direction);
+          const targetPoint = new THREE.Vector3();
+          targetRay.intersectPlane(groundPlane, targetPoint);
+          
+          // If we hit the ground plane, use that point, otherwise use a point in front of the ship
+          if (targetPoint.length() > 0) {
+            this.targetPoint.copy(targetPoint);
+          } else {
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.airship.quaternion);
+            this.targetPoint.copy(forward).multiplyScalar(50).add(this.airship.position);
+          }
+        }
+
+        // Get ship's right vector and direction to target
+        const shipRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.airship.quaternion);
+        const toTarget = new THREE.Vector3().subVectors(this.targetPoint, this.airship.position);
+        
+        // Project target vector onto ship's right plane to determine which side to fire from
+        const rightDot = shipRight.dot(toTarget);
+        
+        // Get ship's forward vector to determine firing sequence
+        const shipForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.airship.quaternion);
+        const forwardDot = shipForward.dot(toTarget);
+
+        // Select cannons based on which side the target is on
+        const cannonPositions = [];
+        if (rightDot > 0) {
+          // Target is to the right (starboard) side
+          cannonPositions.push(
+            { x: 2.6, z: -3 },
+            { x: 2.6, z: -1 },
+            { x: 2.6, z: 1 }
+          );
+        } else {
+          // Target is to the left (port) side
+          cannonPositions.push(
+            { x: -2.6, z: -3 },
+            { x: -2.6, z: -1 },
+            { x: -2.6, z: 1 }
+          );
+        }
+
+        // Fire cannons sequentially from front to back or back to front based on target position
+        if (forwardDot > 0) {
+          // Target is in front, fire front to back
+          cannonPositions.reverse();
+        }
+
+        // Fire cannons with delay
+        let delay = 0;
+        cannonPositions.forEach(pos => {
+          setTimeout(() => {
+            this.fireCannonAtPosition(pos);
+          }, delay);
+          delay += 100; // 100ms between each cannon
+        });
+
+        // Set cooldown
+        this.cannonCooldown = this.cannonCooldownTime;
+      }
+
+      // New method for firing individual cannons
+      fireCannonAtPosition(pos) {
+        // Create larger projectile with glowing core
+        const projectile = new THREE.Group();
+        
+        // Main cannonball (larger)
+        const cannonball = new THREE.Mesh(
+          new THREE.SphereGeometry(0.4, 12, 12), // Doubled size
+          new THREE.MeshPhongMaterial({
+            color: 0x333333,
+            emissive: 0xff4400,
+            emissiveIntensity: 0.8,
+            metalness: 0.7,
+            roughness: 0.3
+          })
+        );
+        projectile.add(cannonball);
+        
+        // Add glowing core effect
+        const glowCore = new THREE.PointLight(0xff4400, 2, 3);
+        projectile.add(glowCore);
+        
+        // Add trailing particles
+        const trailParticles = new THREE.Points(
+          new THREE.BufferGeometry(),
+          new THREE.PointsMaterial({
+            color: 0xff4400,
+            size: 0.2,
+            transparent: true,
+            opacity: 0.6
+          })
+        );
+        const particlePositions = new Float32Array(30 * 3); // 30 particles
+        trailParticles.geometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+        projectile.add(trailParticles);
+        
+        // Position at cannon
+        const worldPos = new THREE.Vector3(pos.x, 0.8, pos.z);
+        worldPos.applyQuaternion(this.airship.quaternion);
+        worldPos.add(this.airship.position);
+        projectile.position.copy(worldPos);
+        
+        // Calculate firing direction toward target point with increased speed
+        const direction = new THREE.Vector3()
+          .subVectors(this.targetPoint, worldPos)
+          .normalize();
+        
+        // Add to scene and projectile list with enhanced properties
+        this.scene.add(projectile);
+        this.projectiles.push({
+          mesh: projectile,
+          velocity: direction.multiplyScalar(4.0), // Increased from 2.5 to 4.0 for faster projectiles
+          timeAlive: 0,
+          trailParticles: trailParticles,
+          particlePositions: particlePositions
+        });
+        
+        // Enhanced muzzle flash
+        this.createMuzzleFlash(worldPos);
+        
+        // Play enhanced cannon sound
+        this.playCannonSound();
+      }
+
+      // Enhanced muzzle flash effect
+      createMuzzleFlash(position) {
+        const flash = new THREE.PointLight(0xff4400, 5, 8); // Brighter flash
+        flash.position.copy(position);
+        this.scene.add(flash);
+        
+        // Add flash mesh for visual effect
+        const flashMesh = new THREE.Mesh(
+          new THREE.SphereGeometry(1, 8, 8),
+          new THREE.MeshBasicMaterial({
+            color: 0xff8800,
+            transparent: true,
+            opacity: 0.8
+          })
+        );
+        flashMesh.position.copy(position);
+        this.scene.add(flashMesh);
+        
+        // Animate flash
+        let scale = 1;
+        const expandFlash = setInterval(() => {
+          scale += 0.4;
+          flashMesh.scale.set(scale, scale, scale);
+          flashMesh.material.opacity -= 0.2;
+          
+          if (flashMesh.material.opacity <= 0) {
+            clearInterval(expandFlash);
+            this.scene.remove(flashMesh);
+            this.scene.remove(flash);
+          }
+        }, 20);
+      }
+      
+      // Enhanced impact effect
+      createImpactEffect(position) {
+        // Bright flash at impact
+        const flash = new THREE.PointLight(0xff8800, 4, 12);
+        flash.position.copy(position);
+        this.scene.add(flash);
+        
+        // Create explosion mesh
+        const explosion = new THREE.Mesh(
+          new THREE.SphereGeometry(0.5, 16, 16),
+          new THREE.MeshBasicMaterial({
+            color: 0xff8800,
+            transparent: true,
+            opacity: 0.9
+          })
+        );
+        explosion.position.copy(position);
+        this.scene.add(explosion);
+        
+        // Create shockwave ring
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.5, 1, 32),
+          new THREE.MeshBasicMaterial({
+            color: 0xff8800,
+            transparent: true,
+            opacity: 0.7,
+            side: THREE.DoubleSide
+          })
+        );
+        ring.position.copy(position);
+        ring.rotation.x = -Math.PI / 2;
+        this.scene.add(ring);
+        
+        // Create debris particles
+        const debris = new THREE.Points(
+          new THREE.BufferGeometry(),
+          new THREE.PointsMaterial({
+            color: 0x666666,
+            size: 0.2,
+            transparent: true,
+            opacity: 0.8
+          })
+        );
+        
+        // Add random debris particles
+        const particleCount = 50;
+        const particlePositions = new Float32Array(particleCount * 3);
+        const particleVelocities = [];
+        
+        for(let i = 0; i < particleCount; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const radius = Math.random() * 2;
+          particlePositions[i * 3] = position.x;
+          particlePositions[i * 3 + 1] = position.y;
+          particlePositions[i * 3 + 2] = position.z;
+          
+          particleVelocities.push(new THREE.Vector3(
+            Math.cos(angle) * radius,
+            Math.random() * 2,
+            Math.sin(angle) * radius
+          ));
+        }
+        
+        debris.geometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+        this.scene.add(debris);
+        
+        // Animate explosion and debris
+        let scale = 1;
+        const expandEffect = setInterval(() => {
+          // Expand and fade explosion
+          scale += 0.2;
+          explosion.scale.set(scale, scale, scale);
+          explosion.material.opacity = Math.max(0, 0.9 - scale * 0.1);
+          
+          // Expand shockwave
+          ring.scale.set(scale * 1.5, scale * 1.5, 1);
+          ring.material.opacity = Math.max(0, ring.material.opacity - 0.03);
+          
+          // Update debris particles
+          const positions = debris.geometry.attributes.position.array;
+          for(let i = 0; i < particleCount; i++) {
+            particleVelocities[i].y -= 0.1; // Gravity
+            positions[i * 3] += particleVelocities[i].x;
+            positions[i * 3 + 1] += particleVelocities[i].y;
+            positions[i * 3 + 2] += particleVelocities[i].z;
+          }
+          debris.geometry.attributes.position.needsUpdate = true;
+          debris.material.opacity = Math.max(0, debris.material.opacity - 0.01);
+          
+          if (explosion.material.opacity <= 0) {
+            clearInterval(expandEffect);
+            explosions.forEach(explosion => this.scene.remove(explosion));
+            this.scene.remove(ring);
+            this.scene.remove(flash);
+            this.scene.remove(debris);
+          }
+        }, 30);
+      }
+      
+      // Add new method for larger explosion effect when enemy is destroyed
+      createExplosionEffect(position) {
+        // Create multiple expanding spheres
+        const explosionCount = 3;
+        const explosions = [];
+        
+        for (let i = 0; i < explosionCount; i++) {
+          const explosion = new THREE.Mesh(
+            new THREE.SphereGeometry(1, 16, 16),
+            new THREE.MeshBasicMaterial({
+              color: i === 0 ? 0xff4400 : i === 1 ? 0xff8800 : 0xffaa00,
+              transparent: true,
+              opacity: 0.9
+            })
+          );
+          explosion.position.copy(position);
+          explosion.scale.setScalar(0.1);
+          this.scene.add(explosion);
+          explosions.push(explosion);
+        }
+        
+        // Create bright flash
+        const flash = new THREE.PointLight(0xff8800, 8, 20);
+        flash.position.copy(position);
+        this.scene.add(flash);
+        
+        // Create debris particles
+        const debris = new THREE.Points(
+          new THREE.BufferGeometry(),
+          new THREE.PointsMaterial({
+            color: 0x8B0000,
+            size: 0.3,
+            transparent: true,
+            opacity: 0.8
+          })
+        );
+        
+        // Add many debris particles
+        const particleCount = 100;
+        const particlePositions = new Float32Array(particleCount * 3);
+        const particleVelocities = [];
+        
+        for(let i = 0; i < particleCount; i++) {
+          const theta = Math.random() * Math.PI * 2;
+          const phi = Math.random() * Math.PI;
+          const radius = 2 + Math.random() * 2;
+          
+          particleVelocities.push(new THREE.Vector3(
+            Math.sin(phi) * Math.cos(theta) * radius,
+            Math.cos(phi) * radius,
+            Math.sin(phi) * Math.sin(theta) * radius
+          ));
+          
+          particlePositions[i * 3] = position.x;
+          particlePositions[i * 3 + 1] = position.y;
+          particlePositions[i * 3 + 2] = position.z;
+        }
+        
+        debris.geometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+        this.scene.add(debris);
+        
+        // Animate explosion
+        let scale = 1;
+        const expandEffect = setInterval(() => {
+          scale += 0.2;
+          
+          // Update explosion spheres
+          explosions.forEach((explosion, index) => {
+            explosion.scale.setScalar(scale * (1 + index * 0.5));
+            explosion.material.opacity = Math.max(0, 0.9 - scale * 0.1);
+          });
+          
+          // Update debris particles
+          const positions = debris.geometry.attributes.position.array;
+          for(let i = 0; i < particleCount; i++) {
+            particleVelocities[i].y -= 0.1; // Gravity
+            positions[i * 3] += particleVelocities[i].x;
+            positions[i * 3 + 1] += particleVelocities[i].y;
+            positions[i * 3 + 2] += particleVelocities[i].z;
+          }
+          debris.geometry.attributes.position.needsUpdate = true;
+          debris.material.opacity = Math.max(0, debris.material.opacity - 0.01);
+          
+          if (explosions[0].material.opacity <= 0) {
+            clearInterval(expandEffect);
+            explosions.forEach(explosion => this.scene.remove(explosion));
+            this.scene.remove(flash);
+            this.scene.remove(debris);
+          }
+        }, 30);
+      }
+      
+      // Helper to get terrain height at any point
+      getTerrainHeightAt(x, z) {
+        const terrainSize = 500;
+        const resolution = 50;
+        
+        // Convert world position to heightmap coordinates
+        const gridX = Math.floor((x + terrainSize/2) / terrainSize * resolution);
+        const gridZ = Math.floor((z + terrainSize/2) / terrainSize * resolution);
+        
+        // Check bounds
+        if (gridX < 0 || gridX >= resolution || gridZ < 0 || gridZ >= resolution) {
+          return 0;
+        }
+        
+        return this.heightMap[gridX][gridZ] * 40;
+      }
+
+      createCrosshair() {
+        // Create crosshair container
+        const crosshairDiv = document.createElement('div');
+        crosshairDiv.id = 'crosshair';
+        crosshairDiv.style.cssText = `
+          position: fixed;
+          pointer-events: none;
+          width: 20px;
+          height: 20px;
+          display: none;
+          z-index: 1000;
+        `;
+
+        // Create crosshair lines
+        const verticalLine = document.createElement('div');
+        verticalLine.style.cssText = `
+          position: absolute;
+          top: 0;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 2px;
+          height: 100%;
+          background-color: rgba(255, 255, 255, 0.8);
+        `;
+
+        const horizontalLine = document.createElement('div');
+        horizontalLine.style.cssText = `
+          position: absolute;
+          top: 50%;
+          left: 0;
+          transform: translateY(-50%);
+          width: 100%;
+          height: 2px;
+          background-color: rgba(255, 255, 255, 0.8);
+        `;
+
+        crosshairDiv.appendChild(verticalLine);
+        crosshairDiv.appendChild(horizontalLine);
+        document.body.appendChild(crosshairDiv);
+        this.crosshair = crosshairDiv;
+        
+        // Track cursor position
+        this.cursorPosition = new THREE.Vector2();
+        window.addEventListener('mousemove', (event) => {
+          if (this.cameraMode === 'orbit') {
+            this.cursorPosition.x = event.clientX;
+            this.cursorPosition.y = event.clientY;
+            // Update crosshair position
+            this.crosshair.style.left = (event.clientX - 10) + 'px';
+            this.crosshair.style.top = (event.clientY - 10) + 'px';
+          }
+        });
+      }
+
+      createEnemyAirship() {
+        const enemy = new THREE.Group();
+        
+        // Create the ship hull (red colored)
+        const hullGeometry = new THREE.BoxGeometry(5, 1.5, 12);
+        // Round the bottom of the hull
+        const hullPositions = hullGeometry.attributes.position.array;
+        for (let i = 0; i < hullPositions.length; i += 3) {
+          // Bottom vertices
+          if (hullPositions[i + 1] < 0) {
+            // Round the bottom in x direction
+            const xPos = hullPositions[i];
+            const roundingFactor = 0.2 * (Math.abs(xPos) / 2.5);
+            hullPositions[i + 1] -= roundingFactor;
+            
+            // Make the bow and stern pointed
+            const zPos = hullPositions[i + 2];
+            const taperZ = 0.3 * (Math.abs(zPos) / 6.0);
+            hullPositions[i] *= (1.0 - taperZ);
+          }
+        }
+        hullGeometry.computeVertexNormals();
+        
+        const hullMaterial = new THREE.MeshPhongMaterial({
+          color: 0x8B0000, // Dark red for pirate ship
+          flatShading: false,
+          shininess: 10
+        });
+        
+        const hull = new THREE.Mesh(hullGeometry, hullMaterial);
+        hull.castShadow = true;
+        hull.receiveShadow = true;
+        
+        // Add deck details
+        const deckGeometry = new THREE.BoxGeometry(4.8, 0.2, 11.8);
+        const deckMaterial = new THREE.MeshPhongMaterial({
+          color: 0x800000, // Darker red for deck
+          flatShading: false
+        });
+        const deck = new THREE.Mesh(deckGeometry, deckMaterial);
+        deck.position.y = 0.85;
+        deck.castShadow = true;
+        deck.receiveShadow = true;
+        
+        // Create the mast
+        const mastGeometry = new THREE.CylinderGeometry(0.2, 0.3, 8, 8);
+        const mastMaterial = new THREE.MeshPhongMaterial({
+          color: 0x8B4513, // Brown wood color
+          flatShading: false
+        });
+        const mast = new THREE.Mesh(mastGeometry, mastMaterial);
+        mast.position.set(0, 5, -1); // Position slightly toward the back
+        mast.castShadow = true;
+        
+        // Create the main sail (partially furled for flying)
+        const sailGeometry = new THREE.PlaneGeometry(3, 4);
+        const sailMaterial = new THREE.MeshPhongMaterial({
+          color: 0x8B0000, // Dark red sails
+          side: THREE.DoubleSide,
+          flatShading: false,
+        });
+        const mainSail = new THREE.Mesh(sailGeometry, sailMaterial);
+        mainSail.rotation.y = Math.PI / 2; // Orient correctly
+        mainSail.position.set(0, 4, -1);
+        mainSail.castShadow = true;
+        
+        // Create a smaller sail at the bow
+        const frontSail = new THREE.Mesh(
+          new THREE.PlaneGeometry(2, 3),
+          sailMaterial.clone()
+        );
+        frontSail.rotation.y = Math.PI / 2;
+        frontSail.position.set(0, 3, 3);
+        frontSail.castShadow = true;
+        
+        // Add a pirate flag on top
+        const flagPoleGeometry = new THREE.CylinderGeometry(0.05, 0.05, 2, 8);
+        const flagPole = new THREE.Mesh(flagPoleGeometry, mastMaterial.clone());
+        flagPole.position.set(0, 9, -1);
+        
+        const flagGeometry = new THREE.PlaneGeometry(1, 0.6);
+        const flagMaterial = new THREE.MeshPhongMaterial({
+          color: 0x000000, // Black flag
+          side: THREE.DoubleSide
+        });
+        const flag = new THREE.Mesh(flagGeometry, flagMaterial);
+        flag.rotation.y = Math.PI / 2;
+        flag.position.set(0, 0.8, 0);
+        flagPole.add(flag);
+        
+        // Add combat cannons on both sides
+        for (let side = -1; side <= 1; side += 2) {
+          for (let i = 0; i < 3; i++) {
+            const cannonGroup = new THREE.Group();
+            
+            // Cannon barrel
+            const barrelGeometry = new THREE.CylinderGeometry(0.15, 0.2, 0.8, 8);
+            const barrelMaterial = new THREE.MeshPhongMaterial({
+              color: 0x333333,
+              metalness: 0.8
+            });
+            const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+            barrel.rotation.z = Math.PI / 2;
+            barrel.position.x = 0.4;
+            cannonGroup.add(barrel);
+            
+            // Cannon base
+            const baseGeometry = new THREE.BoxGeometry(0.4, 0.3, 0.5);
+            const baseMaterial = new THREE.MeshPhongMaterial({
+              color: 0x8B0000
+            });
+            const base = new THREE.Mesh(baseGeometry, baseMaterial);
+            cannonGroup.add(base);
+            
+            // Position on the side of the ship
+            cannonGroup.position.set(side * 2.6, 0.8, -3 + i * 2);
+            enemy.add(cannonGroup);
+          }
+        }
+        
+        // Add cabin/quarterdeck at the back
+        const cabinGeometry = new THREE.BoxGeometry(3, 1.5, 3);
+        const cabinMaterial = new THREE.MeshPhongMaterial({
+          color: 0x8B0000,
+          flatShading: false
+        });
+        const cabin = new THREE.Mesh(cabinGeometry, cabinMaterial);
+        cabin.position.set(0, 1.5, -4);
+        cabin.castShadow = true;
+        
+        // Add windows to cabin
+        const windowGeometry = new THREE.PlaneGeometry(0.4, 0.4);
+        const windowMaterial = new THREE.MeshPhongMaterial({
+          color: 0x87CEFA, // Light blue
+          transparent: true,
+          opacity: 0.7,
+          side: THREE.DoubleSide
+        });
+        
+        // Add windows to the back of the cabin
+        const backWindow = new THREE.Mesh(windowGeometry, windowMaterial);
+        backWindow.position.set(0, 0, -1.55);
+        cabin.add(backWindow);
+        
+        // Add side windows
+        const sideWindow1 = new THREE.Mesh(windowGeometry, windowMaterial);
+        sideWindow1.rotation.y = Math.PI / 2;
+        sideWindow1.position.set(1.55, 0, 0);
+        cabin.add(sideWindow1);
+        
+        const sideWindow2 = new THREE.Mesh(windowGeometry, windowMaterial);
+        sideWindow2.rotation.y = Math.PI / 2;
+        sideWindow2.position.set(-1.55, 0, 0);
+        cabin.add(sideWindow2);
+        
+        // Add railings
+        this.addEnemyRailings(enemy);
+        
+        // Add all main components to the ship
+        enemy.add(
+          hull, deck, mast, mainSail, frontSail, 
+          flagPole, cabin
+        );
+        
+        // Position enemy ship
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 50 + Math.random() * 30;
+        enemy.position.set(
+          Math.cos(angle) * distance,
+          60 + Math.random() * 20,
+          Math.sin(angle) * distance
+        );
+        
+        this.scene.add(enemy);
+        
+        // Store enemy reference and initialize properties
+        this.enemies.push(enemy);
+        this.enemyHealth.set(enemy, 150); // High health for pirate ship
+        
+        // Set up behavior properties
+        enemy.userData = {
+          patrolCenter: enemy.position.clone(),
+          patrolAngle: Math.random() * Math.PI * 2,
+          patrolRadius: 40,
+          patrolSpeed: 0.007,
+          verticalOffset: 0,
+          lastShotTime: 0,
+          shotCooldown: 30,
+          targetAcquisitionRange: 100,
+          attackRange: 80,
+          maxSpeed: 1.5,
+          acceleration: 0.1,
+          velocity: new THREE.Vector3(),
+          rotation: new THREE.Vector3(),
+          isCombatShip: true  // Add this flag to enable combat behavior
+        };
+      }
+
+      // Helper method to add railings to enemy ship
+      addEnemyRailings(enemy) {
+        const railingMaterial = new THREE.MeshPhongMaterial({
+          color: 0x800000
+        });
+        
+        // Create posts
+        const postCount = 10;
+        const shipLength = 11;
+        const shipWidth = 4.8;
+        
+        // Add side railings
+        for (let side = -1; side <= 1; side += 2) {
+          for (let i = 0; i < postCount; i++) {
+            const post = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.06, 0.06, 0.8, 6),
+              railingMaterial
+            );
+            const z = (i / (postCount - 1)) * shipLength - shipLength / 2;
+            post.position.set(side * shipWidth / 2, 1.2, z);
+            enemy.add(post);
+            
+            // Connect posts with horizontal rails (except last post)
+            if (i < postCount - 1) {
+              const railLength = shipLength / (postCount - 1);
+              const rail = new THREE.Mesh(
+                new THREE.BoxGeometry(0.05, 0.05, railLength + 0.05),
+                railingMaterial
+              );
+              rail.position.set(side * shipWidth / 2, 1.5, z + railLength / 2);
+              enemy.add(rail);
+            }
+          }
+        }
+        
+        // Add front and back railings
+        for (let side = -1; side <= 1; side += 2) {
+          const postCount = 5;
+          for (let i = 0; i < postCount; i++) {
+            const post = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.06, 0.06, 0.8, 6),
+              railingMaterial
+            );
+            const x = (i / (postCount - 1)) * shipWidth - shipWidth / 2;
+            post.position.set(x, 1.2, side * shipLength / 2);
+            enemy.add(post);
+            
+            // Connect posts with horizontal rails (except last post)
+            if (i < postCount - 1) {
+              const railLength = shipWidth / (postCount - 1);
+              const rail = new THREE.Mesh(
+                new THREE.BoxGeometry(railLength + 0.05, 0.05, 0.05),
+                railingMaterial
+              );
+              rail.position.set(x + railLength / 2, 1.5, side * shipLength / 2);
+              enemy.add(rail);
+            }
+          }
+        }
+      }
+
+      updateEnemies() {
+        for (const enemy of this.enemies) {
+          const data = enemy.userData;
+          
+          // Default to combat behavior unless explicitly set to not be a combat ship
+          if (data.isCombatShip !== false) {
+            this.updateCombatShip(enemy, data);
+          } else {
+            this.updatePatrolShip(enemy, data);
+          }
+        }
+      }
+
+      updateCombatShip(enemy, data) {
+        // Calculate distance to player
+        const toPlayer = new THREE.Vector3().subVectors(this.airship.position, enemy.position);
+        const distanceToPlayer = toPlayer.length();
+        
+        // Combat behavior
+        if (distanceToPlayer < data.targetAcquisitionRange) {
+          // Chase player
+          const targetDirection = toPlayer.normalize();
+          const currentForward = new THREE.Vector3(0, 0, 1).applyQuaternion(enemy.quaternion);
+          
+          // Calculate rotation to face player
+          const angleToTarget = Math.atan2(
+            targetDirection.x * currentForward.z - targetDirection.z * currentForward.x,
+            targetDirection.x * currentForward.x + targetDirection.z * currentForward.z
+          );
+          
+          // Apply rotation with smoothing
+          enemy.rotation.y += angleToTarget * 0.1;
+          
+          // Apply forward movement
+          if (distanceToPlayer > data.attackRange) {
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(enemy.quaternion);
+            data.velocity.add(forward.multiplyScalar(data.acceleration));
+            
+            // Limit speed
+            const speed = data.velocity.length();
+            if (speed > data.maxSpeed) {
+              data.velocity.multiplyScalar(data.maxSpeed / speed);
+            }
+            
+            // Apply movement
+            enemy.position.add(data.velocity);
+            
+            // Apply drag
+            data.velocity.multiplyScalar(0.98);
+          }
+          
+          // Attack if in range
+          if (distanceToPlayer < data.attackRange && Date.now() - data.lastShotTime > data.shotCooldown * 50) {
+            this.enemyFireCannon(enemy);
+            data.lastShotTime = Date.now();
+          }
+        } else {
+          // Patrol behavior when player is out of range
+          this.updatePatrolShip(enemy, data);
+        }
+        
+        // Add slight banking in turns
+        const bankAngle = Math.sin(enemy.rotation.y) * 0.1;
+        enemy.rotation.z = bankAngle;
+      }
+
+      updatePatrolShip(enemy, data) {
+        // Update patrol movement
+        data.patrolAngle += data.patrolSpeed;
+        data.verticalOffset = Math.sin(data.patrolAngle * 0.5) * 5;
+        
+        // Calculate new position
+        const newX = data.patrolCenter.x + Math.cos(data.patrolAngle) * data.patrolRadius;
+        const newZ = data.patrolCenter.z + Math.sin(data.patrolAngle) * data.patrolRadius;
+        const newY = data.patrolCenter.y + data.verticalOffset;
+        
+        // Update position
+        enemy.position.set(newX, newY, newZ);
+        
+        // Make enemy face direction of movement
+        enemy.rotation.y = data.patrolAngle + Math.PI / 2;
+        
+        // Add slight banking in turns
+        const bankAngle = Math.sin(data.patrolAngle) * 0.1;
+        enemy.rotation.z = bankAngle;
+      }
+
+      enemyFireCannon(enemy) {
+        // Create projectile
+        const projectile = new THREE.Group();
+        
+        // Main cannonball
+        const cannonball = new THREE.Mesh(
+          new THREE.SphereGeometry(0.4, 12, 12),
+          new THREE.MeshPhongMaterial({
+            color: 0x333333,
+            emissive: 0xff0000,
+            emissiveIntensity: 0.8,
+            metalness: 0.7,
+            roughness: 0.3
+          })
+        );
+        projectile.add(cannonball);
+        
+        // Add glowing core effect
+        const glowCore = new THREE.PointLight(0xff0000, 2, 3);
+        projectile.add(glowCore);
+        
+        // Add trailing particles
+        const trailParticles = new THREE.Points(
+          new THREE.BufferGeometry(),
+          new THREE.PointsMaterial({
+            color: 0xff0000,
+            size: 0.2,
+            transparent: true,
+            opacity: 0.6
+          })
+        );
+        const particlePositions = new Float32Array(30 * 3);
+        trailParticles.geometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+        projectile.add(trailParticles);
+        
+        // Position at enemy ship
+        const worldPos = new THREE.Vector3(0, 0.8, 6).applyQuaternion(enemy.quaternion);
+        worldPos.add(enemy.position);
+        projectile.position.copy(worldPos);
+        
+        // Calculate firing direction toward player
+        const direction = new THREE.Vector3()
+          .subVectors(this.airship.position, worldPos)
+          .normalize();
+        
+        // Add to scene and projectile list
+        this.scene.add(projectile);
+        this.projectiles.push({
+          mesh: projectile,
+          velocity: direction.multiplyScalar(3.5),
+          timeAlive: 0,
+          trailParticles: trailParticles,
+          particlePositions: particlePositions,
+          isEnemyProjectile: true
+        });
+        
+        // Create muzzle flash
+        this.createMuzzleFlash(worldPos, 0xff0000);
+      }
+
+      // Add new method for creating lock indicator
+      createLockIndicator() {
+        // Create lock indicator container
+        const lockDiv = document.createElement('div');
+        lockDiv.id = 'lockIndicator';
+        lockDiv.style.cssText = `
+          position: fixed;
+          pointer-events: none;
+          width: 40px;
+          height: 40px;
+          display: none;
+          z-index: 1000;
+          border: 2px solid #ff0000;
+          border-radius: 50%;
+          animation: pulse 1s infinite;
+        `;
+
+        // Add inner crosshair
+        const crosshair = document.createElement('div');
+        crosshair.style.cssText = `
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 20px;
+          height: 20px;
+        `;
+
+        // Add crosshair lines
+        const verticalLine = document.createElement('div');
+        verticalLine.style.cssText = `
+          position: absolute;
+          top: 0;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 2px;
+          height: 100%;
+          background-color: #ff0000;
+        `;
+
+        const horizontalLine = document.createElement('div');
+        horizontalLine.style.cssText = `
+          position: absolute;
+          top: 50%;
+          left: 0;
+          transform: translateY(-50%);
+          width: 100%;
+          height: 2px;
+          background-color: #ff0000;
+        `;
+
+        crosshair.appendChild(verticalLine);
+        crosshair.appendChild(horizontalLine);
+        lockDiv.appendChild(crosshair);
+
+        // Add CSS animation
+        const style = document.createElement('style');
+        style.textContent = `
+          @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+          }
+        `;
+        document.head.appendChild(style);
+
+        document.body.appendChild(lockDiv);
+        this.lockIndicator = lockDiv;
+      }
+
+      // Add new method for finding nearest enemy
+      findNearestEnemy() {
+        let nearestEnemy = null;
+        let minDistance = Infinity;
+
+        for (const enemy of this.enemies) {
+          const distance = enemy.position.distanceTo(this.airship.position);
+          if (distance < minDistance) {
+            minDistance = distance;
+            nearestEnemy = enemy;
+          }
+        }
+
+        return { enemy: nearestEnemy, distance: minDistance };
+      }
+
+      // Add new method for updating lock
+      updateLock() {
+        const { enemy, distance } = this.findNearestEnemy();
+
+        if (enemy && distance < this.lockRange) {
+          // Update lock indicator position
+          const screenPos = this.getScreenPosition(enemy.position);
+          if (screenPos) {
+            this.lockIndicator.style.display = 'block';
+            this.lockIndicator.style.left = (screenPos.x - 20) + 'px';
+            this.lockIndicator.style.top = (screenPos.y - 20) + 'px';
+          }
+
+          // If not already locked or different enemy, update lock
+          if (!this.lockedEnemy || this.lockedEnemy !== enemy) {
+            this.lockedEnemy = enemy;
+            // Add visual effect to indicate lock
+            this.createLockEffect(enemy);
+          }
+        } else {
+          // Clear lock if enemy is out of range or no enemies
+          if (this.lockedEnemy) {
+            this.lockedEnemy = null;
+            this.lockIndicator.style.display = 'none';
+          }
+        }
+      }
+
+      // Add new method for getting screen position
+      getScreenPosition(worldPosition) {
+        const vector = worldPosition.clone();
+        vector.project(this.camera);
+
+        const x = (vector.x + 1) * window.innerWidth / 2;
+        const y = (-vector.y + 1) * window.innerHeight / 2;
+
+        // Check if point is behind camera
+        if (vector.z > 1) {
+          return null;
+        }
+
+        return { x, y };
+      }
+
+      // Add new method for creating lock effect
+      createLockEffect(enemy) {
+        // Create lock ring effect
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(8, 8.5, 32),
+          new THREE.MeshBasicMaterial({
+            color: 0xff0000,
+            transparent: true,
+            opacity: 0.8,
+            side: THREE.DoubleSide
+          })
+        );
+        ring.position.copy(enemy.position);
+        ring.rotation.x = -Math.PI / 2;
+        this.scene.add(ring);
+
+        // Animate ring
+        let scale = 1;
+        const expandRing = setInterval(() => {
+          scale += 0.1;
+          ring.scale.set(scale, scale, 1);
+          ring.material.opacity -= 0.05;
+
+          if (ring.material.opacity <= 0) {
+            clearInterval(expandRing);
+            this.scene.remove(ring);
+          }
+        }, 50);
+      }
+
+      // Add new method for health display
+      createHealthDisplay() {
+        const healthDiv = document.createElement('div');
+        healthDiv.id = 'healthDisplay';
+        healthDiv.style.cssText = `
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          background: rgba(0, 0, 0, 0.5);
+          color: white;
+          padding: 10px;
+          border-radius: 5px;
+          font-family: Arial, sans-serif;
+          z-index: 1000;
+        `;
+        document.body.appendChild(healthDiv);
+        this.healthDisplay = healthDiv;
+        this.updateHealthDisplay();
+      }
+
+      // Add new method for updating health display
+      updateHealthDisplay() {
+        if (this.healthDisplay) {
+          const healthPercent = (this.playerHealth / this.maxPlayerHealth) * 100;
+          const healthColor = healthPercent > 50 ? '#00ff00' : healthPercent > 25 ? '#ffff00' : '#ff0000';
+          this.healthDisplay.innerHTML = `
+            <div style="color: ${healthColor}">
+              Health: ${Math.ceil(this.playerHealth)} / ${this.maxPlayerHealth}
+            </div>
+          `;
+        }
+      }
+
+      // Add new method for player damage
+      takeDamage(amount) {
+        if (this.isPlayerDead) return;
+        
+        this.playerHealth = Math.max(0, this.playerHealth - amount);
+        this.updateHealthDisplay();
+        
+        // Visual feedback for damage
+        this.createDamageEffect();
+        
+        // Check for death
+        if (this.playerHealth <= 0) {
+          this.playerDeath();
+        }
+      }
+
+      // Add new method for damage visual effect
+      createDamageEffect() {
+        // Create red flash effect
+        const flash = document.createElement('div');
+        flash.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(255, 0, 0, 0.3);
+          pointer-events: none;
+          z-index: 999;
+          animation: fadeOut 0.5s forwards;
+        `;
+        
+        // Add CSS animation
+        const style = document.createElement('style');
+        style.textContent = `
+          @keyframes fadeOut {
+            from { opacity: 0.3; }
+            to { opacity: 0; }
+          }
+        `;
+        document.head.appendChild(style);
+        
+        document.body.appendChild(flash);
+        setTimeout(() => {
+          document.body.removeChild(flash);
+        }, 500);
+      }
+
+      // Add new method for player death
+      playerDeath() {
+        this.isPlayerDead = true;
+        this.lastDeathTime = Date.now();
+        
+        // Create explosion effect
+        this.createExplosionEffect(this.airship.position);
+        
+        // Disable controls
+        this.keys = {};
+        
+        // Show respawn message
+        this.showRespawnMessage();
+        
+        // Schedule respawn
+        setTimeout(() => this.respawnPlayer(), this.respawnCooldown);
+      }
+
+      // Add new method for respawn message
+      showRespawnMessage() {
+        const messageDiv = document.createElement('div');
+        messageDiv.id = 'respawnMessage';
+        messageDiv.style.cssText = `
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: rgba(0, 0, 0, 0.8);
+          color: white;
+          padding: 20px;
+          border-radius: 10px;
+          font-family: Arial, sans-serif;
+          text-align: center;
+          z-index: 1000;
+        `;
+        messageDiv.innerHTML = `
+          <h2>Ship Destroyed!</h2>
+          <p>Respawning in ${this.respawnCooldown/1000} seconds...</p>
+        `;
+        document.body.appendChild(messageDiv);
+      }
+
+      // Add new method for player respawn
+      respawnPlayer() {
+        // Remove respawn message
+        const messageDiv = document.getElementById('respawnMessage');
+        if (messageDiv) {
+          document.body.removeChild(messageDiv);
+        }
+        
+        // Reset player state
+        this.isPlayerDead = false;
+        this.playerHealth = this.maxPlayerHealth;
+        this.updateHealthDisplay();
+        
+        // Reset position and velocity
+        this.airship.position.copy(this.respawnPosition);
+        this.velocity.set(0, 0, 0);
+        this.rotation.set(0, 0, 0);
+        
+        // Reset camera
+        if (this.cameraMode === 'follow') {
+          const cameraOffset = new THREE.Vector3(0, 5, -15);
+          cameraOffset.applyQuaternion(this.airship.quaternion);
+          this.camera.position.copy(this.airship.position).add(cameraOffset);
+          this.camera.lookAt(this.airship.position);
+        }
+        
+        // Create respawn effect
+        this.createRespawnEffect();
+      }
+
+      // Add new method for respawn visual effect
+      createRespawnEffect() {
+        // Create shield effect
+        const shield = new THREE.Mesh(
+          new THREE.SphereGeometry(8, 32, 32),
+          new THREE.MeshBasicMaterial({
+            color: 0x00ffff,
+            transparent: true,
+            opacity: 0.5,
+            side: THREE.BackSide
+          })
+        );
+        shield.position.copy(this.airship.position);
+        this.scene.add(shield);
+        
+        // Animate shield
+        let scale = 1;
+        const expandShield = setInterval(() => {
+          scale += 0.1;
+          shield.scale.set(scale, scale, scale);
+          shield.material.opacity -= 0.05;
+          
+          if (shield.material.opacity <= 0) {
+            clearInterval(expandShield);
+            this.scene.remove(shield);
+          }
+        }, 50);
+      }
+    } // End of AirshipGame class
+    
+    // Start the game
+    var game = new AirshipGame();
+  </script>
+</body>
+</html>
