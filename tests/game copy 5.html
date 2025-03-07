@@ -267,7 +267,7 @@
       }
       
       createSkybox() {
-        const skyGeometry = new THREE.BoxGeometry(1000, 1000, 1000);
+        const skyGeometry = new THREE.BoxGeometry(6000, 6000, 6000);
         const skyMaterial = new THREE.MeshBasicMaterial({
           color: 0x87ceeb,
           side: THREE.BackSide,
@@ -287,7 +287,7 @@
             const cloud = this.createBillboardCloud(layer);
             
             // Position in a circle around the center
-            const radius = 8000 + Math.random() * 200;
+            const radius = 5999 + Math.random() * 200;
             const angle = (i / numBillboardClouds) * Math.PI * 2 + Math.random() * 0.5;
             
             cloud.position.set(
