@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b0d12">
+<title>CTC Loop — Single File Mobile</title>
+<style>
+:root{--bg:#0b0d12;--panel:#0f141c;--ink:#e6edf3;--muted:#a6b4c8;--accent:#47d787;--amber:#f7c948}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{height:100%;margin:0;background:radial-gradient(ellipse at 50% 45%,#0e1420 0%,#0b0d12 60%,#090b10 100%);color:var(--ink);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.app{position:fixed;inset:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+.ui{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between}
+.hud{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;padding:8px 10px;color:var(--muted);text-shadow:0 1px 0 rgba(0,0,0,.5)}
+.pill{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);padding:6px 10px;border-radius:999px}
+.hint{align-self:center;max-width:680px;text-align:center;padding:6px 10px;color:var(--muted)}
+.controls{pointer-events:auto;display:flex;gap:.6rem;justify-content:space-between;padding:10px}
+.btn{flex:1 1 auto;background:var(--accent);color:#042516;border:none;border-radius:12px;padding:14px 16px;font-weight:700}
+.btn.secondary{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:#e7f0f7}
+.btn:active{transform:scale(.98)}
+.modal{position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.4);backdrop-filter:blur(2px)}
+.card{background:var(--panel);border:1px solid #243246;border-radius:14px;padding:18px 20px;color:var(--ink);max-width:440px}
+</style>
+</head>
+<body>
+<main class="app">
+  <canvas id="game" aria-label="CTC Loop"></canvas>
+  <div class="ui">
+    <div class="hud">
+      <span class="pill">Loops: <b id="loops">0</b></span>
+      <span class="pill">Echoes: <b id="echoes">0</b></span>
+      <span class="pill">Energy: <b id="energy">100</b>%</span>
+      <span class="pill">Gate: <b id="gate">LOCKED</b></span>
+    </div>
+    <div class="hint" id="hint">Drag anywhere: ↔ rotate, ↕ change radius. Hold Sprint to move faster. One full rotation records an echo.</div>
+    <div class="controls">
+      <button id="btnSprint" class="btn">Sprint</button>
+      <button id="btnReset" class="btn secondary">Reset</button>
+    </div>
+  </div>
+</main>
+
+<template id="tpl-win">
+  <div class="modal">
+    <section class="card">
+      <h2>Loop Resolved</h2>
+      <p>You opened the gate by coordinating with your echoes.</p>
+      <button data-action="again" class="btn">Play Again</button>
+    </section>
+  </div>
+</template>
+
+<script>
+(() => {
+  // ===== Canvas engine (inline) =====
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', { alpha:false, desynchronized:true });
+  let w=0,h=0,dpr=1,last=0,acc=0,step=1/60, running=false;
+  function resize(){
+    dpr = Math.max(1, Math.min(3, window.devicePixelRatio||1));
+    const rect = canvas.getBoundingClientRect();
+    w = rect.width; h = rect.height;
+    canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize, {passive:true}); resize();
+
+  // ===== Unified input (pointer + keyboard) =====
+  const input = {
+    dragging:false, dx:0, dy:0, lastX:0, lastY:0, keys:new Set(), sprint:false,
+    consume(normW, normH){ const dx=this.dx, dy=this.dy; this.dx=0; this.dy=0; return {rot: dx/(normW||300), rad: -dy/(normH||500)}; }
+  };
+  const body = document.body;
+  body.addEventListener('pointerdown', e => { if(e.target.closest('button')) return; input.dragging=true; input.lastX=e.clientX; input.lastY=e.clientY; input.dx=0; input.dy=0; }, {passive:true});
+  body.addEventListener('pointermove', e => { if(!input.dragging) return; input.dx += e.clientX-input.lastX; input.dy += e.clientY-input.lastY; input.lastX=e.clientX; input.lastY=e.clientY; }, {passive:true});
+  body.addEventListener('pointerup',   ()=>{ input.dragging=false; input.dx=0; input.dy=0; }, {passive:true});
+  window.addEventListener('keydown', e => input.keys.add(e.key.toLowerCase()));
+  window.addEventListener('keyup',   e => input.keys.delete(e.key.toLowerCase()));
+
+  // On-screen buttons
+  const btnSprint = document.getElementById('btnSprint');
+  const btnReset  = document.getElementById('btnReset');
+  btnSprint.addEventListener('pointerdown', ()=> input.sprint=true, {passive:true});
+  btnSprint.addEventListener('pointerup',   ()=> input.sprint=false, {passive:true});
+  btnSprint.addEventListener('pointerleave',()=> input.sprint=false, {passive:true});
+  btnReset.addEventListener('click', ()=> reset());
+
+  // HUD
+  const ui = {
+    loops: document.getElementById('loops'),
+    echoes: document.getElementById('echoes'),
+    energy: document.getElementById('energy'),
+    gate: document.getElementById('gate'),
+    tplWin: document.getElementById('tpl-win')
+  };
+  function setGate(open){ ui.gate.textContent = open?'OPEN':'LOCKED'; ui.gate.style.color = open? '#47d787':'#f7c948'; }
+  let vibrate = navigator.vibrate ? (ms)=>navigator.vibrate(ms) : ()=>{};
+
+  // ===== Game state (CTC mechanic) =====
+  const TWO_PI = Math.PI*2;
+  const P = { rMin:80, rMaxScale:0.42, baseSpeed:0.012, radSpeed:1.2, loopSteps:720, echoLimit:8 };
+  let energy, energyRegen, loopStep, record, echoes, loopCount, gateOpen, player, plates, gate;
+
+  function reset(){
+    energy=100; energyRegen=0.035; loopStep=0; record=new Array(P.loopSteps);
+    echoes=[]; loopCount=0; gateOpen=false;
+    player={r:P.rMin+40, theta:0};
+    plates=[ {r:0.55, theta:Math.PI*0.05, on:false}, {r:0.78, theta:Math.PI*1.15, on:false} ];
+    gate={ r:0.33, theta:Math.PI*1.85 };
+    refreshHUD();
+  }
+  function refreshHUD(){
+    ui.loops.textContent = Math.floor(loopCount);
+    ui.echoes.textContent = echoes.length;
+    ui.energy.textContent = energy.toFixed(0);
+    setGate(gateOpen);
+  }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+  function update(dt){
+    const rMax = Math.min(w,h)*P.rMaxScale;
+    let angVel = P.baseSpeed, radVel=0;
+
+    const sprinting = input.sprint || input.keys.has('shift');
+    if(sprinting && energy>0){ angVel*=2.1; energy=clamp(energy-12*dt,0,100); }
+    else { energy=clamp(energy+energyRegen,0,100); }
+
+    // keyboard axes (fallback)
+    if(input.keys.has('a')||input.keys.has('arrowleft'))  player.theta -= angVel;
+    if(input.keys.has('d')||input.keys.has('arrowright')) player.theta += angVel;
+    if(input.keys.has('w')||input.keys.has('arrowup'))    radVel += +P.radSpeed;
+    if(input.keys.has('s')||input.keys.has('arrowdown'))  radVel += -P.radSpeed;
+
+    // drag
+    const drag = input.consume(w*0.6,h*0.8);
+    player.theta += (angVel*40)*drag.rot;
+    radVel += (P.radSpeed*12)*drag.rad;
+
+    player.r = clamp(player.r + radVel, P.rMin, rMax);
+
+    // theta wrap + loop step
+    if(player.theta<0) player.theta+=TWO_PI;
+    if(player.theta>=TWO_PI) player.theta-=TWO_PI;
+    loopStep = Math.floor((player.theta/TWO_PI)*P.loopSteps);
+    record[loopStep] = { r:player.r, theta:player.theta };
+
+    // loop complete
+    if(record.every(Boolean) && loopStep===0){
+      echoes.unshift({samples:record.slice(), hue:200+Math.random()*40});
+      if(echoes.length>P.echoLimit) echoes.pop();
+      record=new Array(P.loopSteps); loopCount++; vibrate(10);
+    }
+
+    // plate occupancy
+    plates.forEach(p=>p.on=false);
+    const occupy=(r,theta)=>{
+      for(const p of plates){
+        const pr = P.rMin + (rMax-P.rMin)*p.r;
+        const dtheta = Math.atan2(Math.sin(theta-p.theta), Math.cos(theta-p.theta));
+        const dr = Math.abs(r-pr);
+        const dist = Math.hypot(dr, (pr)*dtheta*0.9);
+        if(dist<28) p.on=true;
+      }
+    };
+    for(const E of echoes){ const s = E.samples[loopStep]||E.samples[E.samples.length-1]; occupy(s.r,s.theta); }
+    occupy(player.r, player.theta);
+    gateOpen = plates.every(p=>p.on);
+
+    // win check
+    if(gateOpen){
+      const gr = P.rMin + (rMax-P.rMin)*gate.r;
+      const dtheta = Math.atan2(Math.sin(player.theta-gate.theta), Math.cos(player.theta-gate.theta));
+      const dr = Math.abs(player.r-gr);
+      const dist = Math.hypot(dr, (gr)*dtheta*0.9);
+      if(dist<28){ showWin(); }
+    }
+
+    // reset key
+    if(input.keys.has('r')) reset();
+    refreshHUD();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,w,h);
+    const rMax = Math.min(w,h)*P.rMaxScale;
+    const cx=w/2, cy=h/2;
+
+    // rings
+    ctx.save(); ctx.strokeStyle='rgba(255,255,255,.06)';
+    for(let r=P.rMin; r<=rMax; r+=(rMax-P.rMin)/6){ ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke(); }
+    ctx.restore();
+
+    // echoes
+    for(let i=echoes.length-1;i>=0;i--){
+      const E=echoes[i]; const s = E.samples[loopStep]||E.samples[E.samples.length-1];
+      const x=cx+s.r*Math.cos(s.theta), y=cy+s.r*Math.sin(s.theta);
+      ctx.beginPath(); ctx.fillStyle=`hsla(${E.hue},80%,64%,0.38)`; ctx.arc(x,y,8,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.strokeStyle=`hsla(${E.hue},90%,60%,0.12)`;
+      for(let k=0;k<E.samples.length;k+=8){ const ss=E.samples[k]; const tx=cx+ss.r*Math.cos(ss.theta), ty=cy+ss.r*Math.sin(ss.theta); if(k===0) ctx.moveTo(tx,ty); else ctx.lineTo(tx,ty); }
+      ctx.stroke();
+    }
+
+    // plates
+    for(const p of plates){
+      const pr = P.rMin + (rMax-P.rMin)*p.r;
+      const px=cx+pr*Math.cos(p.theta), py=cy+pr*Math.sin(p.theta);
+      ctx.beginPath(); ctx.fillStyle=p.on?'#ffd76a':'rgba(247,201,72,.28)'; ctx.strokeStyle='rgba(247,201,72,.65)';
+      ctx.arc(px,py,18,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    }
+
+    // gate
+    const gr = P.rMin + (rMax-P.rMin)*gate.r;
+    const gx = cx + gr*Math.cos(gate.theta), gy = cy + gr*Math.sin(gate.theta);
+    ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle=gateOpen?'#47d787':'rgba(255,255,255,.18)'; ctx.fillStyle=gateOpen?'rgba(71,215,135,.18)':'rgba(255,255,255,.04)';
+    ctx.arc(gx,gy,28,0,Math.PI*2); ctx.fill(); ctx.stroke();
+
+    // player
+    const px=cx+player.r*Math.cos(player.theta), py=cy+player.r*Math.sin(player.theta);
+    ctx.beginPath(); ctx.fillStyle='#47d787'; ctx.arc(px,py,9,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.strokeStyle='#a1f3c9'; ctx.moveTo(px,py); ctx.lineTo(cx+player.r*Math.cos(player.theta+0.25), cy+player.r*Math.sin(player.theta+0.25)); ctx.stroke();
+  }
+
+  function showWin(){
+    if(document.querySelector('.modal')) return;
+    const frag = document.getElementById('tpl-win').content.cloneNode(true);
+    const modal = frag.querySelector('.modal');
+    modal.addEventListener('click', (e)=>{
+      if(e.target.dataset.action==='again' || e.target.classList.contains('modal')){
+        modal.remove(); reset();
+      }
+    });
+    document.body.appendChild(frag);
+  }
+
+  function frame(t){
+    if(!running) return;
+    const dt = Math.min(0.1, (t-last)/1000); last=t; acc+=dt;
+    while(acc>=step){ update(step); acc-=step; }
+    draw(); requestAnimationFrame(frame);
+  }
+  function start(){ if(running) return; running=true; last=performance.now(); requestAnimationFrame(frame); }
+
+  // Wake Lock best effort
+  (async()=>{ try{ if('wakeLock' in navigator){ await navigator.wakeLock.request('screen'); } }catch(e){} })();
+
+  reset(); start();
+})();
+</script>
+</body>
+</html>
